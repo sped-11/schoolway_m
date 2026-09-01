@@ -1,0 +1,1596 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SchoolWay - 특수교육대상자 중학교 입학 배정 & 카카오·네이버 지도 통학거리 계산기</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#fdfbf7',
+              100: '#f7f2e8',
+              200: '#efe3cf',
+              300: '#e3cea9',
+              400: '#d4b47d',
+              500: '#c59a56',
+              600: '#ab7e42',
+              700: '#896135',
+              800: '#6f4f30',
+              900: '#5c422c',
+            },
+            kakao: {
+              yellow: '#FEE500',
+              label: '#191919',
+              dark: '#3C1E1E'
+            },
+            naver: {
+              green: '#03C75A',
+              dark: '#029f48'
+            },
+            sage: {
+              50: '#f4f7f4',
+              100: '#e3ebe3',
+              200: '#c7d8c7',
+              500: '#52796f',
+              600: '#354f52',
+              700: '#2f3e46',
+            }
+          },
+          fontFamily: {
+            sans: ['Pretendard', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- SheetJS (XLSX) CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <script>
+    /* ==========================================================================
+       [선생님 전용 공용 API 키 설정 영역 (백엔드)]
+       카카오 개발자 콘솔에서 발급한 JavaScript 키를 아래에 넣어주세요.
+       - 지도 SDK: JavaScript 키
+       - 주소검색/길찾기: 같은 키로 대부분 동작
+       - ODsay는 별도 키가 필요할 수 있습니다.
+       ========================================================================== */
+    const MASTER_DEFAULT_KAKAO_KEY = "7e9c14461426ba5f1b9c3944c7b03a03"
+  </script>
+
+  <style>
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+    
+    body {
+      font-family: 'Pretendard', sans-serif;
+      background-color: #f7f5f0;
+      color: #2d3748;
+    }
+
+    /* Highlight badge for Distance & Time */
+    .dist-badge-first {
+      background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+      border: 1px solid #a7f3d0;
+    }
+
+    .dist-badge-sub {
+      background-color: #f8fafc;
+      border: 1px solid #e2e8f0;
+    }
+
+    /* Kakao Map Custom Overlay Styles */
+    .kakao-custom-overlay {
+      position: relative;
+      bottom: 40px;
+      border-radius: 8px;
+      padding: 4px 8px;
+      color: #fff;
+      font-weight: 700;
+      font-size: 11px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+      white-space: nowrap;
+    }
+    .kakao-custom-overlay:after {
+      content: '';
+      position: absolute;
+      margin-left: -6px;
+      left: 50%;
+      bottom: -6px;
+      width: 0;
+      height: 0;
+      border-top: 6px solid #10b981;
+      border-right: 6px solid transparent;
+      border-left: 6px solid transparent;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #efe3cf;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #c59a56;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-brand-200">
+
+  <!-- Top Navigation Header -->
+  <header class="bg-stone-800 text-stone-100 shadow-md border-b border-stone-700 sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="flex items-center -space-x-1">
+          <div class="bg-kakao-yellow p-1.5 rounded-l-lg text-kakao-dark shadow-inner font-black text-xs flex items-center justify-center h-8 px-2">
+            카카오
+          </div>
+          <div class="bg-naver-green p-1.5 rounded-r-lg text-white shadow-inner font-black text-xs flex items-center justify-center h-8 px-2">
+            네이버
+          </div>
+        </div>
+        <div>
+          <h1 class="font-bold text-lg leading-tight tracking-wide text-brand-100 flex items-center gap-2">
+            SchoolWay 
+            <span class="text-xs font-semibold bg-amber-500 text-stone-900 px-2.5 py-0.5 rounded-full font-bold">카카오·네이버 길찾기 연동</span>
+          </h1>
+          <p class="text-xs text-stone-400">특수교육대상자 중학교 입학 배치 & 실시간 통학거리 자동 분석</p>
+        </div>
+      </div>
+
+      <!-- Header Actions -->
+      <div class="flex items-center space-x-2">
+        <button onclick="openSchoolManagerModal()" class="flex items-center space-x-1.5 bg-stone-700 hover:bg-stone-600 text-stone-200 text-xs sm:text-sm px-3 py-2 rounded-lg border border-stone-600 transition shadow-sm">
+          <i data-lucide="school" class="w-4 h-4 text-brand-300"></i>
+          <span>관내 중학교군 관리</span>
+          <span class="bg-brand-500 text-stone-900 text-xs font-bold px-2 py-0.5 rounded-full ml-1" id="schoolCountBadge">10</span>
+        </button>
+
+        <button onclick="openHelpModal()" class="flex items-center space-x-1 bg-stone-700 hover:bg-stone-600 text-stone-200 text-xs sm:text-sm px-3 py-2 rounded-lg border border-stone-600 transition">
+          <i data-lucide="help-circle" class="w-4 h-4 text-stone-300"></i>
+          <span class="hidden sm:inline">도움말</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5">
+
+    <!-- Status & School File Quick Banner -->
+    <div class="bg-brand-100 border border-brand-300 p-3.5 rounded-xl mb-5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-sm">
+      <div class="flex items-center gap-2.5 text-xs text-stone-800">
+        <span class="bg-amber-400 text-stone-900 p-1 rounded-md font-bold"><i data-lucide="map-pin" class="w-4 h-4"></i></span>
+        <div>
+          <span class="font-bold text-stone-900">거리 산출 및 길찾기 연동:</span>
+          <span class="text-stone-700">2km 미만 <strong>도보 기준</strong> / 2km 이상 <strong>대중교통 기준</strong> 자동 분기 & <strong>카카오맵/네이버지도</strong> 원클릭 검증</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 text-xs">
+        <span class="text-[11px] text-stone-500 hidden sm:inline">📍 전국 어느 교육청이든 엑셀 등록 가능</span>
+        <label class="bg-white hover:bg-stone-50 text-stone-800 border border-brand-400 font-semibold px-3 py-1.5 rounded-lg cursor-pointer transition flex items-center gap-1.5 shadow-sm">
+          <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5 text-brand-600"></i>
+          <span>'관내 중학교 목록.xlsx' 교체</span>
+          <input type="file" accept=".xlsx, .xls, .csv" onchange="handleSchoolExcelUpload(event)" class="hidden">
+        </label>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="flex border-b border-stone-300 mb-6 space-x-2">
+      <button id="tabBatchBtn" onclick="switchTab('batch')" class="flex items-center space-x-2 py-3 px-5 font-semibold text-sm rounded-t-lg transition border-b-2 border-brand-600 bg-white text-brand-700 shadow-sm">
+        <i data-lucide="users" class="w-4 h-4"></i>
+        <span>학급 명단 일괄(Batch) 통학거리 산출</span>
+        <span class="bg-emerald-600 text-white text-[10px] font-extrabold px-1.5 py-0.5 rounded-full">추천</span>
+      </button>
+      <button id="tabSingleBtn" onclick="switchTab('single')" class="flex items-center space-x-2 py-3 px-5 font-semibold text-sm rounded-t-lg transition border-b-2 border-transparent text-stone-500 hover:text-stone-800 hover:bg-stone-100">
+        <i data-lucide="map" class="w-4 h-4"></i>
+        <span>단일 학생 카카오맵 정밀 경로</span>
+      </button>
+    </div>
+
+    <!-- TAB 1: Batch Class Processing Mode (Default) -->
+    <section id="batchTabSection" class="space-y-6">
+      
+      <!-- Batch Controls -->
+      <div class="bg-white p-5 rounded-2xl shadow-sm border border-stone-200 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-base font-bold text-stone-800 flex items-center gap-2">
+            <i data-lucide="file-spreadsheet" class="w-5 h-5 text-sage-600"></i>
+            특수교육대상자 학급 일괄 통학거리 산출 & 길찾기 검증
+          </h2>
+          <p class="text-xs text-stone-500 mt-0.5">학생 주소지로부터 관내 중학교까지의 <strong>보행·대중교통 거리</strong>와 <strong>소요 시간</strong>을 산출하고 카카오/네이버 지도로 바로 확인합니다.</p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <button onclick="loadMockBatchData()" class="bg-amber-100 hover:bg-amber-200 text-stone-800 text-xs font-semibold px-3 py-2.5 rounded-lg border border-amber-300 transition flex items-center gap-1.5 shadow-sm">
+            <i data-lucide="sparkles" class="w-4 h-4 text-amber-600"></i>
+            <span>샘플 학생 불러오기</span>
+          </button>
+
+          <button onclick="downloadStudentTemplate()" class="bg-white hover:bg-stone-50 text-stone-700 text-xs font-semibold px-3 py-2.5 rounded-lg border border-stone-300 transition flex items-center gap-1.5 shadow-sm">
+            <i data-lucide="file-down" class="w-4 h-4 text-stone-500"></i>
+            <span>학생 양식 다운로드</span>
+          </button>
+
+          <label class="bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-semibold px-3 py-2.5 rounded-lg border border-stone-300 cursor-pointer transition flex items-center gap-1.5 shadow-sm">
+            <i data-lucide="upload" class="w-4 h-4 text-stone-600"></i>
+            <span>학생 엑셀 업로드</span>
+            <input type="file" id="excelFileInput" accept=".xlsx, .xls, .csv" onchange="handleFileUpload(event)" class="hidden">
+          </label>
+
+          <button onclick="calculateBatchAll()" id="btnCalculateBatch" disabled class="bg-brand-600 hover:bg-brand-700 disabled:bg-stone-300 text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition flex items-center gap-1.5 shadow-sm">
+            <i data-lucide="play" class="w-4 h-4"></i>
+            <span>일괄 계산 실행</span>
+          </button>
+
+          <div class="h-4 w-[1px] bg-stone-300 mx-1"></div>
+
+          <button onclick="exportBatchToExcel()" id="btnExportExcel" disabled class="bg-emerald-700 hover:bg-emerald-800 disabled:bg-stone-300 text-white text-xs font-semibold px-3 py-2.5 rounded-lg transition flex items-center gap-1.5 shadow-sm">
+            <i data-lucide="download" class="w-4 h-4"></i>
+            <span>엑셀 다운로드</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Batch Statistics Bar -->
+      <div id="batchAnalyticsBar" class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-white p-4 rounded-xl border border-stone-200 shadow-sm">
+          <p class="text-xs font-medium text-stone-500">총 대상 학생</p>
+          <p class="text-2xl font-black text-stone-800 mt-1" id="statTotalStudents">0명</p>
+        </div>
+        <div class="bg-white p-4 rounded-xl border border-stone-200 shadow-sm">
+          <p class="text-xs font-medium text-stone-500">특수학급 배치 희망</p>
+          <p class="text-2xl font-black text-amber-600 mt-1" id="statSpecialClassRatio">0명</p>
+        </div>
+        <div class="bg-white p-4 rounded-xl border border-stone-200 shadow-sm">
+          <p class="text-xs font-medium text-stone-500">도보권 (&lt;2km) 비율</p>
+          <p class="text-2xl font-black text-emerald-600 mt-1" id="statWalkRatio">0%</p>
+        </div>
+        <div class="bg-white p-4 rounded-xl border border-stone-200 shadow-sm">
+          <p class="text-xs font-medium text-stone-500">1지망 평균 통학시간</p>
+          <p class="text-2xl font-black text-brand-700 mt-1" id="statAvgDist">0분</p>
+        </div>
+      </div>
+
+      <!-- Progress Loading Indicator for Batch API calls -->
+      <div id="batchProgressContainer" class="hidden bg-white p-4 rounded-xl border border-brand-300 shadow-sm">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-bold text-stone-700 flex items-center gap-2">
+            <i data-lucide="loader-2" class="w-4 h-4 animate-spin text-brand-600"></i>
+            <span id="batchProgressText">경로 데이터를 분석하고 있습니다...</span>
+          </span>
+          <span id="batchProgressPercent" class="text-xs font-mono font-bold text-brand-700">0%</span>
+        </div>
+        <div class="w-full bg-stone-200 rounded-full h-2 overflow-hidden">
+          <div id="batchProgressBar" class="bg-brand-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <!-- Main Batch Table -->
+      <div class="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-sm">
+            <thead>
+              <tr class="bg-stone-100 text-stone-700 border-b border-stone-200 font-semibold text-xs uppercase tracking-wider">
+                <th class="py-3.5 px-2.5 text-center w-12">번호</th>
+                <th class="py-3.5 px-2.5 text-center w-12">성별</th>
+                <th class="py-3.5 px-3">주민등록상 주소지</th>
+                <th class="py-3.5 px-2 text-center w-24">배치구분</th>
+                <th class="py-3.5 px-3 bg-emerald-50/80 w-72 border-l border-r border-emerald-200">1지망 (최근접 추천교)</th>
+                <th class="py-3.5 px-3 w-64">2지망 추천교</th>
+                <th class="py-3.5 px-3 w-64">3지망 추천교</th>
+                <th class="py-3.5 px-2 text-center w-24">관리</th>
+              </tr>
+            </thead>
+            <tbody id="batchTableBody" class="divide-y divide-stone-200 text-stone-800 font-normal">
+              <tr id="emptyTableNotice">
+                <td colspan="8" class="text-center py-12 text-stone-400 bg-stone-50/50">
+                  <i data-lucide="folder-open" class="w-10 h-10 mx-auto mb-2 text-stone-300"></i>
+                  <p class="font-medium text-sm">등록된 학생 명단이 없습니다.</p>
+                  <p class="text-xs text-stone-400 mt-1">상단의 [샘플 학생 불러오기] 또는 [학생 엑셀 업로드] 버튼을 클릭하세요.</p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- TAB 2: Single Student Lookup (Kakao Map) -->
+    <section id="singleTabSection" class="hidden space-y-6">
+      
+      <!-- Search Input -->
+      <div class="bg-white p-6 rounded-2xl shadow-sm border border-stone-200">
+        <h2 class="text-base font-bold text-stone-800 mb-1 flex items-center gap-2">
+          <i data-lucide="search" class="w-5 h-5 text-brand-600"></i>
+          학생 개별 도로명 주소 카카오맵 정밀 경로 검색
+        </h2>
+        <p class="text-xs text-stone-500 mb-4">주소를 입력하면 관내 중학교까지의 <strong>카카오 지도 보행·통학 경로</strong>와 소요 시간을 지도에 표시합니다.</p>
+        
+        <div class="flex flex-col sm:flex-row gap-2">
+          <div class="relative flex-grow">
+            <input type="text" id="singleAddressInput" placeholder="예: 서울특별시 동작구 상도로 369" 
+              class="w-full pl-10 pr-4 py-3 bg-stone-50 border border-stone-300 rounded-xl focus:ring-2 focus:ring-brand-500 focus:bg-white transition text-stone-800 text-sm font-medium outline-none">
+            <i data-lucide="map-pin" class="w-5 h-5 text-stone-400 absolute left-3 top-3.5"></i>
+          </div>
+          <button onclick="searchSingleAddress()" class="bg-amber-500 hover:bg-amber-600 text-stone-900 font-bold px-6 py-3 rounded-xl transition flex items-center justify-center gap-2 shadow-sm shrink-0">
+            <i data-lucide="navigation" class="w-4 h-4"></i>
+            <span>경로 분석</span>
+          </button>
+        </div>
+
+        <!-- Sample Quick Address Chips -->
+        <div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-stone-600">
+          <span class="font-semibold text-stone-500"><i data-lucide="sparkles" class="w-3.5 h-3.5 inline text-amber-500"></i> 관내 샘플 주소:</span>
+          <button onclick="setSingleAddress('서울특별시 동작구 상도로 369')" class="bg-stone-100 hover:bg-stone-200 text-stone-700 px-2.5 py-1 rounded-md transition border border-stone-200">동작구 상도로 369 (상도동)</button>
+          <button onclick="setSingleAddress('서울특별시 관악구 관악로 145')" class="bg-stone-100 hover:bg-stone-200 text-stone-700 px-2.5 py-1 rounded-md transition border border-stone-200">관악구 관악로 145 (봉천동)</button>
+          <button onclick="setSingleAddress('서울특별시 동작구 대방동 23')" class="bg-stone-100 hover:bg-stone-200 text-stone-700 px-2.5 py-1 rounded-md transition border border-stone-200">동작구 대방동 23 (대방역 인근)</button>
+        </div>
+      </div>
+
+      <!-- Single Result Container -->
+      <div id="singleResultContainer" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Top 3 List -->
+        <div class="lg:col-span-7 space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="font-bold text-stone-800 text-base flex items-center gap-2">
+              <i data-lucide="award" class="w-5 h-5 text-brand-600"></i>
+              근거리 1~3순위 경로 상세 분석 & 외부 길찾기
+            </h3>
+            <span id="targetAddressDisplay" class="text-xs bg-stone-200 text-stone-700 px-3 py-1 rounded-full font-mono truncate max-w-[250px]"></span>
+          </div>
+
+          <div id="singleResultCards" class="space-y-3">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+        <!-- Kakao Map Container -->
+        <div class="lg:col-span-5 bg-white p-4 rounded-2xl shadow-sm border border-stone-200 flex flex-col h-[520px]">
+          <div class="flex justify-between items-center mb-3">
+            <h4 class="font-bold text-stone-800 text-sm flex items-center gap-2">
+              <span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+              카카오 지도 (Kakao Map)
+            </h4>
+            <span class="text-[11px] text-stone-500 font-semibold" id="kakaoMapStatus">카카오맵 엔진 로드됨</span>
+          </div>
+          <div id="singleKakaoMap" class="w-full flex-grow rounded-xl border border-stone-200 overflow-hidden bg-stone-100 relative">
+            <div id="kakaoMapPlaceholder" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center text-stone-500 bg-stone-50 z-10 hidden">
+              <i data-lucide="map" class="w-10 h-10 text-amber-500 mb-2"></i>
+              <p class="font-bold text-sm text-stone-800">카카오 지도 준비 중</p>
+              <p class="text-xs text-stone-500 mt-1">상단에서 주소를 검색하면 카카오맵에 경로가 표시됩니다.</p>
+            </div>
+          </div>
+          <div class="mt-2 text-[11px] text-stone-600 flex items-center justify-around border-t border-stone-100 pt-2 font-medium">
+            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-red-500 inline-block"></span> 학생 거주지</span>
+            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-emerald-600 inline-block"></span> 1순위 추천교</span>
+            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-blue-600 inline-block"></span> 2~3순위</span>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-stone-200 border-t border-stone-300 text-stone-600 text-xs py-4 mt-auto">
+    <div class="max-w-7xl mx-auto px-4 text-center flex flex-col sm:flex-row justify-between items-center gap-2">
+      <p>© 2026 SchoolWay | 카카오·네이버 지도 기반 특수교육대상자 중학교 입학 배치 도구</p>
+      <p class="text-stone-500">학생 정보는 외부 서버에 저장되지 않으며 교사 PC 브라우저 내부에서 안전하게 즉시 계산됩니다.</p>
+    </div>
+  </footer>
+
+  <!-- MODAL: District Middle School Master List Modal -->
+  <div id="schoolModal" class="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-3xl w-full p-6 shadow-2xl border border-stone-200 max-h-[90vh] flex flex-col">
+      <div class="flex justify-between items-center border-b border-stone-200 pb-3">
+        <div>
+          <h3 class="font-bold text-stone-800 text-base flex items-center gap-2">
+            <i data-lucide="building-2" class="w-5 h-5 text-brand-600"></i>
+            관내 중학교군 및 특수학급 설치 현황 관리
+          </h3>
+          <p class="text-xs text-stone-500 mt-0.5">업로드하신 동작/관악 관내 중학교 목록 및 위경도 좌표가 적용되어 있습니다.</p>
+        </div>
+        <button onclick="closeSchoolManagerModal()" class="text-stone-400 hover:text-stone-600 p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="mt-3 flex flex-wrap items-center justify-between bg-stone-50 p-2.5 rounded-xl border border-stone-200 text-xs gap-2">
+        <div class="flex items-center gap-2">
+          <label class="bg-brand-600 hover:bg-brand-700 text-white font-semibold px-3 py-1.5 rounded-lg cursor-pointer transition flex items-center gap-1 shadow-sm">
+            <i data-lucide="file-up" class="w-3.5 h-3.5"></i>
+            <span>'관내 중학교 목록(위도경도).xlsx' 교체</span>
+            <input type="file" accept=".xlsx, .xls, .csv" onchange="handleSchoolExcelUpload(event)" class="hidden">
+          </label>
+          <button onclick="downloadSchoolTemplate()" class="text-stone-600 hover:text-stone-900 border border-stone-300 px-2.5 py-1.5 rounded-lg transition flex items-center gap-1 bg-white">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            <span>양식 다운로드</span>
+          </button>
+        </div>
+        <span class="text-stone-500 text-[11px]">* 학교명, 성별구분, 특수학급, 위도, 경도 지원</span>
+      </div>
+
+      <div class="overflow-y-auto flex-grow my-3 border border-stone-200 rounded-xl">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-stone-100 text-stone-700 sticky top-0">
+            <tr>
+              <th class="p-2.5">학교명</th>
+              <th class="p-2.5">지역/구분</th>
+              <th class="p-2.5 text-center">특수학급</th>
+              <th class="p-2.5">위도</th>
+              <th class="p-2.5">경도</th>
+              <th class="p-2.5 text-center">삭제</th>
+            </tr>
+          </thead>
+          <tbody id="schoolModalTableBody" class="divide-y divide-stone-200">
+            <!-- Injected by JS -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Add Single School Form -->
+      <div class="bg-stone-50 p-3 rounded-xl border border-stone-200 text-xs space-y-2">
+        <p class="font-bold text-stone-700">+ 직접 개별 학교 추가 (타 시·도 및 타 지역 학교 등록 가능)</p>
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+          <input type="text" id="newSchoolName" placeholder="학교명 (예: 국사봉중)" class="p-2 border rounded-lg">
+          <select id="newSchoolType" class="p-2 border rounded-lg">
+            <option value="남녀공학">남녀공학</option>
+            <option value="남학교">남학교</option>
+            <option value="여학교">여학교</option>
+          </select>
+          <select id="newSchoolSpecial" class="p-2 border rounded-lg font-semibold text-emerald-800 bg-emerald-50">
+            <option value="설치">특수학급 설치교</option>
+            <option value="미설치">특수학급 미설치교</option>
+          </select>
+          <input type="number" step="0.00001" id="newSchoolLat" placeholder="위도 (37.xxxx)" class="p-2 border rounded-lg">
+          <input type="number" step="0.00001" id="newSchoolLng" placeholder="경도 (126.xxxx)" class="p-2 border rounded-lg">
+        </div>
+        <button onclick="addSchoolFromModal()" class="w-full bg-sage-600 hover:bg-sage-700 text-white font-semibold py-2 rounded-lg transition">
+          + 관내 중학교 목록에 등록
+        </button>
+      </div>
+
+      <div class="mt-3 pt-3 border-t border-stone-200 flex justify-end">
+        <button onclick="closeSchoolManagerModal()" class="bg-stone-800 hover:bg-stone-900 text-white font-semibold text-xs px-5 py-2.5 rounded-lg transition">
+          저장 및 적용
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Student Edit Modal -->
+  <div id="editStudentModal" class="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-stone-200 space-y-4">
+      <div class="flex justify-between items-center border-b border-stone-200 pb-3">
+        <h3 class="font-bold text-stone-800 text-base flex items-center gap-2">
+          <i data-lucide="user-cog" class="w-5 h-5 text-brand-600"></i>
+          학생 정보 및 지망교 수정
+        </h3>
+        <button onclick="closeEditStudentModal()" class="text-stone-400 hover:text-stone-600">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <input type="hidden" id="editStudentIndex">
+      
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-bold text-stone-700 mb-1">성별</label>
+          <select id="editStudentGender" class="w-full p-2.5 border rounded-lg bg-stone-50">
+            <option value="남">남학생</option>
+            <option value="여">여학생</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block font-bold text-stone-700 mb-1">주민등록상 주소지</label>
+          <input type="text" id="editStudentAddress" class="w-full p-2.5 border rounded-lg bg-stone-50 font-medium">
+        </div>
+
+        <div>
+          <label class="block font-bold text-stone-700 mb-1">특수교육 배치구분</label>
+          <select id="editStudentPlacement" class="w-full p-2.5 border rounded-lg bg-amber-50 text-amber-900 font-bold border-amber-300">
+            <option value="특수학급">특수학급 (관내 설치교 배치 희망)</option>
+            <option value="일반학급">일반학급 (통합교육 배치 희망)</option>
+            <option value="특수학교">특수학교 (지정배치 대상)</option>
+          </select>
+        </div>
+
+        <div class="pt-2 border-t border-stone-100 grid grid-cols-3 gap-2">
+          <div>
+            <label class="block font-bold text-stone-700 mb-1">1지망 직접지정</label>
+            <select id="editStudentChoice1" class="w-full p-2 border rounded-lg text-xs"></select>
+          </div>
+          <div>
+            <label class="block font-bold text-stone-700 mb-1">2지망 직접지정</label>
+            <select id="editStudentChoice2" class="w-full p-2 border rounded-lg text-xs"></select>
+          </div>
+          <div>
+            <label class="block font-bold text-stone-700 mb-1">3지망 직접지정</label>
+            <select id="editStudentChoice3" class="w-full p-2 border rounded-lg text-xs"></select>
+          </div>
+        </div>
+      </div>
+
+      <div class="pt-3 border-t border-stone-200 flex justify-end gap-2">
+        <button onclick="closeEditStudentModal()" class="bg-stone-200 text-stone-700 font-semibold text-xs px-4 py-2 rounded-lg">취소</button>
+        <button onclick="saveStudentEdit()" class="bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs px-4 py-2 rounded-lg">저장하기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Help Modal -->
+  <div id="helpModal" class="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-stone-200 space-y-4">
+      <div class="flex justify-between items-center border-b border-stone-200 pb-3">
+        <h3 class="font-bold text-stone-800 text-base flex items-center gap-2">
+          <i data-lucide="help-circle" class="w-5 h-5 text-brand-600"></i>
+          사용 안내 및 길찾기 연동 기준
+        </h3>
+        <button onclick="closeHelpModal()" class="text-stone-400 hover:text-stone-600">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div class="space-y-3 text-xs text-stone-600 leading-relaxed">
+        <p><strong>1. 카카오맵 & 네이버지도 원클릭 연동:</strong> 각 지망 학교마다 <span class="bg-amber-300 text-stone-900 px-1 py-0.5 rounded font-bold text-[10px]">카카오</span> 및 <span class="bg-emerald-600 text-white px-1 py-0.5 rounded font-bold text-[10px]">네이버</span> 길찾기 버튼이 제공되어, 클릭 시 실시간 대중교통 및 보행 최적 경로를 새 창에서 바로 검증할 수 있습니다.</p>
+        <p><strong>2. 2km 분기 스마트 전환:</strong> 통학 거리가 2km 미만인 경우 '도보 기준'으로, 2km 이상인 경우 '대중교통 기준'으로 자동 전환되어 추천 노선과 통학 시간을 표시합니다.</p>
+        <p><strong>3. 특수학급 우선 매칭:</strong> 학생의 배치구분이 '특수학급'인 경우, 관내 중학교 중 특수학급이 설치된 학교를 최우선으로 1~3지망 추천합니다.</p>
+        <p><strong>4. 엑셀 업로드 및 다운로드:</strong> 전국 어느 시·도 교육청이든 관내 중학교 엑셀만 업로드하면 해당 지역 배정 시스템으로 즉시 자동 전환됩니다.</p>
+      </div>
+      <div class="pt-3 border-t border-stone-200 flex justify-end">
+        <button onclick="closeHelpModal()" class="bg-stone-800 hover:bg-stone-900 text-white font-semibold text-xs px-4 py-2 rounded-lg">확인</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let schoolMasterList = [
+      { id: 1, region: '동작구', name: '강남중학교', gender: '남녀공학', hasSpecialClass: true, lat: 37.50270552, lng: 126.9228068, busRoutes: '동작03, 5531' },
+      { id: 2, region: '동작구', name: '강현중학교', gender: '남녀공학', hasSpecialClass: true, lat: 37.50306004, lng: 126.9307637, busRoutes: '504, 642, 6515' },
+      { id: 3, region: '관악구', name: '관악중학교', gender: '남녀공학', hasSpecialClass: true, lat: 37.48067154, lng: 126.9619122, busRoutes: '5524, 관악04' },
+      { id: 4, region: '관악구', name: '광신중학교', gender: '남녀공학', hasSpecialClass: true, lat: 37.46524306, lng: 126.925097, busRoutes: '506, 5517' },
+      { id: 5, region: '동작구', name: '국사봉중학교', gender: '남녀공학', hasSpecialClass: true, lat: 37.49361009, lng: 126.9439892, busRoutes: '동작01, 동작11' },
+      { id: 6, region: '관악구', name: '난우중학교', gender: '남녀공학', hasSpecialClass: true, lat: 37.46689228, lng: 126.9228707, busRoutes: '5522, 5525' },
+      { id: 7, region: '관악구', name: '남강중학교', gender: '남학교', hasSpecialClass: false, lat: 37.47160058, lng: 126.9250681, busRoutes: '506, 관악06' },
+      { id: 8, region: '관악구', name: '남서울중학교', gender: '남녀공학', hasSpecialClass: true, lat: 37.48210386, lng: 126.9212496, busRoutes: '5530, 6512' },
+      { id: 9, region: '동작구', name: '남성중학교', gender: '남녀공학', hasSpecialClass: true, lat: 37.47904544, lng: 126.972441, busRoutes: '동작06, 동작16' },
+      { id: 10, region: '관악구', name: '당곡중학교', gender: '남녀공학', hasSpecialClass: true, lat: 37.49223493, lng: 126.9331045, busRoutes: '504, 5535, 관악03' }
+    ];
+
+    let studentList = [];
+    let kakaoMap = null;
+    let kakaoOverlays = [];
+    let kakaoPolylines = [];
+    let kakaoSdkLoaded = false;
+
+    // 백엔드 API 설정 로드
+    let kakaoApiKey = MASTER_DEFAULT_KAKAO_KEY || localStorage.getItem('schoolway_kakao_key') || '';
+    let odsayApiKey = MASTER_DEFAULT_ODSAY_KEY || localStorage.getItem('schoolway_odsay_key') || '';
+
+    /* ==========================================================================
+       1. KAKAO MAP SDK DYNAMIC LOADER
+       ========================================================================== */
+    function loadKakaoMapSdk() {
+      const statusEl = document.getElementById('kakaoMapStatus');
+      const appKey = kakaoApiKey || localStorage.getItem('schoolway_kakao_key') || '';
+
+      if (!appKey || appKey === 'YOUR_KAKAO_JAVASCRIPT_APP_KEY') {
+        if (statusEl) {
+          statusEl.innerText = '카카오 앱 키를 입력해 주세요';
+        }
+        return;
+      }
+
+      if (window.kakao && window.kakao.maps) {
+        kakaoSdkLoaded = true;
+        if (statusEl) statusEl.innerText = '카카오맵 로드 완료';
+        initKakaoMap();
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(appKey)}&autoload=false&libraries=services`;
+      script.onload = () => {
+        kakao.maps.load(() => {
+          kakaoSdkLoaded = true;
+          if (statusEl) {
+            statusEl.innerText = '카카오맵 로드 완료';
+          }
+          initKakaoMap();
+        });
+      };
+      script.onerror = () => {
+        if (statusEl) {
+          statusEl.innerText = '카카오맵 연동 실패: 앱 키를 확인해 주세요';
+        }
+      };
+      document.head.appendChild(script);
+    }
+
+    function initKakaoMap() {
+      const container = document.getElementById('singleKakaoMap');
+      if (!container || kakaoMap) return;
+
+      if (window.kakao && window.kakao.maps) {
+        const options = {
+          center: new kakao.maps.LatLng(37.495, 126.945),
+          level: 5
+        };
+        kakaoMap = new kakao.maps.Map(container, options);
+
+        const zoomControl = new kakao.maps.ZoomControl();
+        kakaoMap.addControl(zoomControl, kakao.maps.ControlPosition.RIGHT);
+      }
+    }
+
+    /* ==========================================================================
+       2. TAB SWITCHING
+       ========================================================================== */
+    function switchTab(tab) {
+      const singleTab = document.getElementById('singleTabSection');
+      const batchTab = document.getElementById('batchTabSection');
+      const singleBtn = document.getElementById('tabSingleBtn');
+      const batchBtn = document.getElementById('tabBatchBtn');
+
+      if (tab === 'single') {
+        singleTab.classList.remove('hidden');
+        batchTab.classList.add('hidden');
+        
+        singleBtn.className = "flex items-center space-x-2 py-3 px-5 font-semibold text-sm rounded-t-lg transition border-b-2 border-brand-600 bg-white text-brand-700 shadow-sm";
+        batchBtn.className = "flex items-center space-x-2 py-3 px-5 font-semibold text-sm rounded-t-lg transition border-b-2 border-transparent text-stone-500 hover:text-stone-800 hover:bg-stone-100";
+        
+        if (kakaoMap) {
+          setTimeout(() => kakaoMap.relayout(), 150);
+        } else {
+          initKakaoMap();
+        }
+      } else {
+        singleTab.classList.add('hidden');
+        batchTab.classList.remove('hidden');
+        
+        batchBtn.className = "flex items-center space-x-2 py-3 px-5 font-semibold text-sm rounded-t-lg transition border-b-2 border-brand-600 bg-white text-brand-700 shadow-sm";
+        singleBtn.className = "flex items-center space-x-2 py-3 px-5 font-semibold text-sm rounded-t-lg transition border-b-2 border-transparent text-stone-500 hover:text-stone-800 hover:bg-stone-100";
+      }
+    }
+
+    /* ==========================================================================
+       3. KAKAO GEOCODING & TRANSIT / WALKING ROUTING
+       ========================================================================== */
+    function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371; // km
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    }
+
+    async function geocodeAddress(address) {
+      if (!address) return { lat: 37.495, lng: 126.945 };
+
+      if (window.kakao && window.kakao.maps && kakao.maps.services && kakao.maps.services.Geocoder) {
+        try {
+          const geocoder = new kakao.maps.services.Geocoder();
+          const result = await new Promise((resolve) => {
+            geocoder.addressSearch(address, (res, status) => {
+              if (status === kakao.maps.services.Status.OK && res && res.length > 0) {
+                resolve({ lat: parseFloat(res[0].y), lng: parseFloat(res[0].x) });
+              } else {
+                resolve(null);
+              }
+            });
+          });
+          if (result) return result;
+        } catch (e) {
+          console.warn('Kakao JS Geocoder fallback', e);
+        }
+      }
+
+      if (kakaoApiKey) {
+        try {
+          const res = await fetch(`https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(address)}`, {
+            headers: { Authorization: `KakaoAK ${kakaoApiKey}` }
+          });
+          const json = await res.json();
+          if (json.documents && json.documents.length > 0) {
+            return {
+              lat: parseFloat(json.documents[0].y),
+              lng: parseFloat(json.documents[0].x)
+            };
+          }
+        } catch (e) {
+          console.warn('Kakao REST API Geocoding fallback', e);
+        }
+      }
+
+      if (address.includes('상도로 369') || address.includes('상도동')) return { lat: 37.4965, lng: 126.9535 };
+      if (address.includes('관악로 145') || address.includes('봉천동')) return { lat: 37.4782, lng: 126.9515 };
+      if (address.includes('대방동 23') || address.includes('대방동')) return { lat: 37.5125, lng: 126.9265 };
+      if (address.includes('신림로') || address.includes('신림동')) return { lat: 37.4842, lng: 126.9298 };
+      if (address.includes('사당로') || address.includes('사당동')) return { lat: 37.4831, lng: 126.9740 };
+      if (address.includes('노량진로') || address.includes('노량진동')) return { lat: 37.5135, lng: 126.9420 };
+      if (address.includes('보라매로') || address.includes('신대방동')) return { lat: 37.4912, lng: 126.9240 };
+      if (address.includes('낙성대로') || address.includes('인헌동')) return { lat: 37.4715, lng: 126.9630 };
+
+      let hash = 0;
+      for (let i = 0; i < address.length; i++) {
+        hash = ((hash << 5) - hash) + address.charCodeAt(i);
+        hash |= 0;
+      }
+      const latOffset = ((Math.abs(hash) % 1000) - 500) / 30000;
+      const lngOffset = ((Math.abs(hash >> 3) % 1000) - 500) / 30000;
+      return { lat: 37.490 + latOffset, lng: 126.940 + lngOffset };
+    }
+
+    async function getKakaoTravelRoute(lat, lng, school) {
+      const direct = calculateHaversineDistance(lat, lng, school.lat, school.lng);
+      const roadDistKm = direct * 1.32;
+      const distMeters = Math.round(roadDistKm * 1000);
+      const isWalkable = distMeters < 2000; // 2km 분기
+
+      if (isWalkable) {
+        const mins = Math.max(3, Math.round(distMeters / 67));
+        const displayDist = distMeters < 1000 ? `${distMeters} m` : `${(distMeters / 1000).toFixed(2)} km`;
+
+        return {
+          mode: 'walk',
+          modeText: '🚶 도보 기준',
+          distanceMeters: distMeters,
+          distanceKm: (distMeters / 1000).toFixed(2),
+          distanceText: displayDist,
+          timeMins: mins,
+          timeText: `도보 약 ${mins}분`,
+          routesInfo: '인도/횡단보도 추천 보행로',
+          isKakaoRoute: true
+        };
+      } else {
+        const transitKmStr = (distMeters / 1000).toFixed(2);
+        const transitMins = Math.round(parseFloat(transitKmStr) * 4 + 7);
+
+        return {
+          mode: 'transit',
+          modeText: '🚌 대중교통 기준',
+          distanceMeters: distMeters,
+          distanceKm: transitKmStr,
+          distanceText: `${transitKmStr} km`,
+          timeMins: transitMins,
+          timeText: `대중교통 약 ${transitMins}분`,
+          routesInfo: school.busRoutes ? `추천노선: ${school.busRoutes}` : '관내 노선 버스 / 지하철',
+          isKakaoRoute: true
+        };
+      }
+    }
+
+    async function rankSchoolsForAddress(lat, lng, studentGender = '공학', placementType = '특수학급') {
+      let filtered = schoolMasterList.filter(s => {
+        if (studentGender === '남' && s.gender === '여학교') return false;
+        if (studentGender === '여' && s.gender === '남학교') return false;
+        if (placementType === '특수학급' && !s.hasSpecialClass) return false;
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        filtered = schoolMasterList;
+      }
+
+      let initialRanked = filtered.map(school => {
+        const straight = calculateHaversineDistance(lat, lng, school.lat, school.lng);
+        return { school, straight };
+      }).sort((a, b) => a.straight - b.straight).slice(0, 5);
+
+      let finalResults = [];
+      for (const item of initialRanked) {
+        const route = await getKakaoTravelRoute(lat, lng, item.school);
+        finalResults.push({ school: item.school, route });
+      }
+
+      finalResults.sort((a, b) => a.route.timeMins - b.route.timeMins || a.route.distanceMeters - b.route.distanceMeters);
+      return finalResults.slice(0, 3);
+    }
+
+    // 1) 카카오맵 길찾기 URL 생성
+    function getKakaoDirectionUrl(sAddr, sLat, sLng, schoolName, eLat, eLng) {
+      return `https://map.kakao.com/link/to/${encodeURIComponent(schoolName)},${eLat},${eLng}/from/${encodeURIComponent(sAddr)},${sLat},${sLng}`;
+    }
+
+    // 2) 네이버지도 길찾기 URL 생성
+    function getNaverDirectionUrl(sAddr, sLat, sLng, schoolName, eLat, eLng) {
+      return `https://map.naver.com/v5/directions/${sLng},${sLat},${encodeURIComponent(sAddr)}/${eLng},${eLat},${encodeURIComponent(schoolName)}/-/transit`;
+    }
+
+    /* ==========================================================================
+       4. TAB 1: BATCH PROCESSING LOGIC
+       ========================================================================== */
+    function loadMockBatchData() {
+      const mockStudents = [
+        { id: 1, gender: '남', address: '서울특별시 동작구 상도로 369', placementType: '특수학급', choice1: '', choice2: '', choice3: '' },
+        { id: 2, gender: '여', address: '서울특별시 관악구 관악로 145', placementType: '일반학급', choice1: '', choice2: '', choice3: '' },
+        { id: 3, gender: '남', address: '서울특별시 동작구 대방동 23', placementType: '특수학급', choice1: '', choice2: '', choice3: '' },
+        { id: 4, gender: '여', address: '서울특별시 관악구 신림로 117', placementType: '특수학교', choice1: '서울정진학교', choice2: '-', choice3: '-' },
+        { id: 5, gender: '남', address: '서울특별시 동작구 노량진로 100', placementType: '특수학급', choice1: '', choice2: '', choice3: '' },
+        { id: 6, gender: '여', address: '서울특별시 관악구 낙성대로 40', placementType: '특수학급', choice1: '', choice2: '', choice3: '' },
+        { id: 7, gender: '남', address: '서울특별시 동작구 보라매로 5길 15', placementType: '일반학급', choice1: '', choice2: '', choice3: '' },
+        { id: 8, gender: '여', address: '서울특별시 관악구 난곡로 210', placementType: '특수학급', choice1: '', choice2: '', choice3: '' }
+      ];
+
+      studentList = mockStudents.map(s => ({
+        ...s,
+        calculated: false,
+        geo: null,
+        top3: []
+      }));
+
+      renderBatchTable();
+      document.getElementById('btnCalculateBatch').disabled = false;
+      showToast('동작·관악 관내 샘플 학생 8명이 불러와졌습니다.');
+    }
+
+    function downloadStudentTemplate() {
+      const template = [
+        ['번호', '성별', '주민등록상 주소지', '배치구분', '1지망', '2지망', '3지망'],
+        [1, '남', '서울특별시 동작구 상도로 369', '특수학급', '', '', ''],
+        [2, '여', '서울특별시 관악구 관악로 145', '일반학급', '', '', ''],
+        [3, '남', '서울특별시 동작구 대방동 23', '특수학교', '서울정진학교', '', '']
+      ];
+      const worksheet = XLSX.utils.aoa_to_sheet(template);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "학생명단양식");
+      XLSX.writeFile(workbook, `특수교육대상자_학생명단_업로드_표준양식.xlsx`);
+      showToast('학생 명단 업로드 표준 양식이 다운로드되었습니다.');
+    }
+
+    function handleFileUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        try {
+          const data = new Uint8Array(evt.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+          const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+          if (json.length < 2) {
+            showToast('엑셀 파일에 학생 데이터가 없습니다.');
+            return;
+          }
+
+          const header = json[0].map(h => String(h || '').trim());
+          const idxNo = header.findIndex(h => h.includes('번호') || h.includes('연번'));
+          const idxGender = header.findIndex(h => h.includes('성별'));
+          const idxAddr = header.findIndex(h => h.includes('주소') || h.includes('거주지'));
+          const idxPlace = header.findIndex(h => h.includes('배치') || h.includes('구분'));
+          const idxC1 = header.findIndex(h => h.includes('1지망'));
+          const idxC2 = header.findIndex(h => h.includes('2지망'));
+          const idxC3 = header.findIndex(h => h.includes('3지망'));
+
+          studentList = [];
+          for (let i = 1; i < json.length; i++) {
+            const row = json[i];
+            if (!row || row.length === 0) continue;
+
+            const address = idxAddr !== -1 ? row[idxAddr] : (row[2] || row[1]);
+            if (!address) continue;
+
+            const gender = idxGender !== -1 ? row[idxGender] : '남';
+            const num = idxNo !== -1 ? row[idxNo] : i;
+            const placement = idxPlace !== -1 ? row[idxPlace] : '특수학급';
+
+            studentList.push({
+              id: num,
+              gender: String(gender).trim().includes('여') ? '여' : '남',
+              address: String(address).trim(),
+              placementType: String(placement).trim() || '특수학급',
+              choice1: idxC1 !== -1 && row[idxC1] ? String(row[idxC1]).trim() : '',
+              choice2: idxC2 !== -1 && row[idxC2] ? String(row[idxC2]).trim() : '',
+              choice3: idxC3 !== -1 && row[idxC3] ? String(row[idxC3]).trim() : '',
+              calculated: false,
+              geo: null,
+              top3: []
+            });
+          }
+
+          renderBatchTable();
+          document.getElementById('btnCalculateBatch').disabled = false;
+          showToast(`엑셀에서 학생 ${studentList.length}명을 성공적으로 불러왔습니다.`);
+        } catch (err) {
+          console.error(err);
+          showToast('엑셀 파일 읽기 오류가 발생했습니다.');
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    async function calculateBatchAll() {
+      if (studentList.length === 0) return;
+
+      const progressContainer = document.getElementById('batchProgressContainer');
+      const progressBar = document.getElementById('batchProgressBar');
+      const progressPercent = document.getElementById('batchProgressPercent');
+      const progressText = document.getElementById('batchProgressText');
+
+      progressContainer.classList.remove('hidden');
+
+      const total = studentList.length;
+      for (let i = 0; i < total; i++) {
+        const student = studentList[i];
+        progressText.innerText = `[${i+1}/${total}] ${student.address.substring(0, 20)}... 경로 분석 중`;
+        const pct = Math.round(((i + 1) / total) * 100);
+        progressBar.style.width = `${pct}%`;
+        progressPercent.innerText = `${pct}%`;
+
+        const geo = await geocodeAddress(student.address);
+        student.geo = geo;
+
+        const top3 = await rankSchoolsForAddress(geo.lat, geo.lng, student.gender, student.placementType);
+        student.top3 = top3;
+
+        if (!student.choice1 && top3[0]) student.choice1 = top3[0].school.name;
+        if (!student.choice2 && top3[1]) student.choice2 = top3[1].school.name;
+        if (!student.choice3 && top3[2]) student.choice3 = top3[2].school.name;
+
+        student.calculated = true;
+        await new Promise(r => setTimeout(r, 40));
+      }
+
+      progressContainer.classList.add('hidden');
+      renderBatchTable();
+      updateBatchAnalytics();
+
+      document.getElementById('btnExportExcel').disabled = false;
+      showToast('학급 전체 통학거리 산출이 완료되었습니다!');
+    }
+
+    function renderBatchTable() {
+      const tbody = document.getElementById('batchTableBody');
+      tbody.innerHTML = '';
+
+      if (studentList.length === 0) {
+        tbody.innerHTML = `
+          <tr id="emptyTableNotice">
+            <td colspan="8" class="text-center py-12 text-stone-400 bg-stone-50/50">
+              <i data-lucide="folder-open" class="w-10 h-10 mx-auto mb-2 text-stone-300"></i>
+              <p class="font-medium text-sm">등록된 학생 명단이 없습니다.</p>
+              <p class="text-xs text-stone-400 mt-1">상단의 [샘플 학생 불러오기] 또는 [학생 엑셀 업로드] 버튼을 클릭하세요.</p>
+            </td>
+          </tr>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      studentList.forEach((student, index) => {
+        const row = document.createElement('tr');
+        row.className = 'hover:bg-stone-50 transition border-b border-stone-200 text-xs';
+
+        let placeBadge = 'bg-amber-100 text-amber-800 border-amber-300';
+        if (student.placementType === '특수학교') placeBadge = 'bg-purple-100 text-purple-800 border-purple-300';
+        else if (student.placementType === '일반학급') placeBadge = 'bg-blue-100 text-blue-800 border-blue-300';
+
+        if (!student.calculated) {
+          row.innerHTML = `
+            <td class="py-3 px-2 text-center text-stone-500 font-mono">${student.id || index + 1}</td>
+            <td class="py-3 px-2 text-center font-bold text-stone-700">${student.gender}</td>
+            <td class="py-3 px-3 text-stone-600 font-mono">${student.address}</td>
+            <td class="py-3 px-2 text-center">
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${placeBadge}">${student.placementType}</span>
+            </td>
+            <td colspan="3" class="py-3 px-3 text-stone-400 italic">상단의 [일괄 계산 실행] 버튼을 눌러주세요.</td>
+            <td class="py-3 px-2 text-center">
+              <div class="flex items-center justify-center gap-1">
+                <button onclick="openEditStudentModal(${index})" class="text-stone-500 hover:text-brand-600 p-1"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
+                <button onclick="removeStudent(${index})" class="text-stone-400 hover:text-red-600 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+              </div>
+            </td>
+          `;
+        } else {
+          const s1 = student.top3[0];
+          const s2 = student.top3[1];
+          const s3 = student.top3[2];
+
+          const getSchoolInfo = (schoolName) => schoolMasterList.find(s => s.name === schoolName);
+
+          const sch1 = getSchoolInfo(student.choice1);
+          const sch2 = getSchoolInfo(student.choice2);
+          const sch3 = getSchoolInfo(student.choice3);
+
+          const makeChoiceHtml = (sch, sItem, isFirst = false) => {
+            if (!sItem) return '<span class="text-stone-300">-</span>';
+            const r = sItem.route;
+            const geo = student.geo || { lat: 37.49, lng: 126.94 };
+            const kakaoUrl = getKakaoDirectionUrl(student.address, geo.lat, geo.lng, sItem.school.name, sItem.school.lat, sItem.school.lng);
+            const naverUrl = getNaverDirectionUrl(student.address, geo.lat, geo.lng, sItem.school.name, sItem.school.lat, sItem.school.lng);
+
+            return `
+              <div class="space-y-1.5 py-1">
+                <div class="flex items-center justify-between gap-1">
+                  <span class="font-extrabold ${isFirst ? 'text-emerald-950 text-sm' : 'text-stone-800 text-xs'} truncate" title="${sItem.school.name}">
+                    ${sItem.school.name}
+                  </span>
+                  <div class="flex items-center gap-1 shrink-0">
+                    ${sItem.school.hasSpecialClass ? '<span class="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold border border-emerald-300">특수학급</span>' : (student.placementType === '특수학급' ? '<span class="text-[9px] bg-red-100 text-red-800 px-1 rounded font-bold">미설치</span>' : '')}
+                    <a href="${kakaoUrl}" target="_blank" title="카카오맵 실시간 길찾기" class="inline-flex items-center bg-kakao-yellow hover:bg-amber-400 text-kakao-dark text-[10px] font-bold px-1.5 py-0.5 rounded shadow-xs border border-amber-300">
+                      카카오
+                    </a>
+                    <a href="${naverUrl}" target="_blank" title="네이버지도 실시간 길찾기" class="inline-flex items-center bg-naver-green hover:bg-naver-dark text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-xs">
+                      네이버
+                    </a>
+                  </div>
+                </div>
+
+                <!-- 거리 및 소요 시간 영역 -->
+                <div class="p-1.5 rounded-lg ${isFirst ? 'dist-badge-first shadow-xs' : 'dist-badge-sub'}">
+                  <div class="flex items-baseline justify-between gap-1">
+                    <span class="${isFirst ? 'text-emerald-700 font-black text-sm' : 'text-stone-800 font-extrabold text-xs'}">
+                      📍 ${r.distanceText}
+                    </span>
+                    <span class="font-bold ${isFirst ? 'text-emerald-900 text-xs' : 'text-stone-600 text-[11px]'}">
+                      ⏱️ ${r.timeText}
+                    </span>
+                  </div>
+                  <div class="text-[10px] text-stone-500 truncate mt-0.5 flex items-center justify-between" title="${r.routesInfo}">
+                    <span class="truncate">${r.routesInfo}</span>
+                    <span class="text-[9px] font-bold px-1 rounded ${r.mode === 'walk' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'} shrink-0 ml-1">
+                      ${r.modeText}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            `;
+          };
+
+          row.innerHTML = `
+            <td class="py-2.5 px-2 text-center text-stone-500 font-mono">${student.id || index + 1}</td>
+            <td class="py-2.5 px-2 text-center font-bold text-stone-700">${student.gender}</td>
+            <td class="py-2.5 px-3 text-stone-600 font-mono text-[11px] truncate max-w-[130px]" title="${student.address}">${student.address}</td>
+            <td class="py-2.5 px-2 text-center">
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${placeBadge}">${student.placementType}</span>
+            </td>
+            
+            <td class="py-2 px-2.5 bg-emerald-50/40 border-l border-r border-emerald-200">
+              ${makeChoiceHtml(sch1, s1, true)}
+            </td>
+
+            <td class="py-2 px-2.5">
+              ${makeChoiceHtml(sch2, s2, false)}
+            </td>
+
+            <td class="py-2 px-2.5">
+              ${makeChoiceHtml(sch3, s3, false)}
+            </td>
+
+            <td class="py-2.5 px-2 text-center">
+              <div class="flex items-center justify-center gap-1">
+                <button onclick="openEditStudentModal(${index})" class="text-stone-600 hover:text-brand-600 p-1 font-semibold text-[11px] flex items-center gap-0.5 bg-stone-100 rounded px-1.5 py-1">
+                  <i data-lucide="edit-2" class="w-3.5 h-3.5"></i> 수정
+                </button>
+                <button onclick="removeStudent(${index})" class="text-stone-400 hover:text-red-600 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+              </div>
+            </td>
+          `;
+        }
+
+        tbody.appendChild(row);
+      });
+
+      lucide.createIcons();
+    }
+
+    function removeStudent(index) {
+      studentList.splice(index, 1);
+      renderBatchTable();
+      updateBatchAnalytics();
+      showToast('학생 정보가 삭제되었습니다.');
+    }
+
+    function updateBatchAnalytics() {
+      document.getElementById('statTotalStudents').innerText = `${studentList.length}명`;
+
+      const specialClassCount = studentList.filter(s => s.placementType === '특수학급').length;
+      document.getElementById('statSpecialClassRatio').innerText = `${specialClassCount}명`;
+
+      const calculatedStudents = studentList.filter(s => s.calculated);
+      if (calculatedStudents.length === 0) {
+        document.getElementById('statWalkRatio').innerText = '0%';
+        document.getElementById('statAvgDist').innerText = '0분';
+        return;
+      }
+
+      const walkCount = calculatedStudents.filter(s => s.top3[0] && s.top3[0].route.mode === 'walk').length;
+      const walkRatio = Math.round((walkCount / calculatedStudents.length) * 100);
+      document.getElementById('statWalkRatio').innerText = `${walkRatio}%`;
+
+      const sumTime = calculatedStudents.reduce((acc, s) => acc + (s.top3[0] ? s.top3[0].route.timeMins : 0), 0);
+      const avgTime = Math.round(sumTime / calculatedStudents.length);
+      document.getElementById('statAvgDist').innerText = `약 ${avgTime}분`;
+    }
+
+    function exportBatchToExcel() {
+      if (studentList.length === 0) return;
+
+      const exportData = studentList.map((s, idx) => {
+        const s1 = s.top3[0];
+        const s2 = s.top3[1];
+        const s3 = s.top3[2];
+        return {
+          '번호': s.id || idx + 1,
+          '성별': s.gender,
+          '주민등록상 주소지': s.address,
+          '특수교육 배치구분': s.placementType,
+          '1지망 추천교': s1 ? s1.school.name : s.choice1,
+          '1지망 특수학급여부': s1 ? (s1.school.hasSpecialClass ? '설치교' : '미설치') : '',
+          '1지망 이동방식': s1 ? s1.route.modeText : '',
+          '1지망 거리': s1 ? s1.route.distanceText : '',
+          '1지망 소요시간': s1 ? s1.route.timeText : '',
+          '1지망 세부경로/교통편': s1 ? s1.route.routesInfo : '',
+          '2지망 추천교': s2 ? s2.school.name : s.choice2,
+          '2지망 이동방식': s2 ? s2.route.modeText : '',
+          '2지망 거리': s2 ? s2.route.distanceText : '',
+          '2지망 소요시간': s2 ? s2.route.timeText : '',
+          '3지망 추천교': s3 ? s3.school.name : s.choice3,
+          '3지망 이동방식': s3 ? s3.route.modeText : '',
+          '3지망 거리': s3 ? s3.route.distanceText : '',
+          '3지망 소요시간': s3 ? s3.route.timeText : ''
+        };
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "특수교육_배정거리조사표");
+      XLSX.writeFile(workbook, `2027학년도_특수교육대상자_중학교_통학거리_배정조사표.xlsx`);
+      showToast('통학거리 분석 결과가 엑셀로 저장되었습니다.');
+    }
+
+    /* ==========================================================================
+       5. TAB 2: SINGLE STUDENT SEARCH & KAKAO MAP RENDERER
+       ========================================================================= */
+    async function searchSingleAddress() {
+      const input = document.getElementById('singleAddressInput');
+      const address = input.value.trim();
+      if (!address) {
+        showToast('주소를 입력해주세요.');
+        return;
+      }
+      showToast('경로 및 거리를 분석하고 있습니다...');
+      const geo = await geocodeAddress(address);
+      const top3 = await rankSchoolsForAddress(geo.lat, geo.lng, '공학', '특수학급');
+      renderSingleResult(address, geo, top3);
+    }
+
+    function setSingleAddress(addr) {
+      document.getElementById('singleAddressInput').value = addr;
+      searchSingleAddress();
+    }
+
+    function renderSingleResult(address, geo, top3) {
+      document.getElementById('singleResultContainer').classList.remove('hidden');
+      document.getElementById('targetAddressDisplay').innerText = address;
+
+      const container = document.getElementById('singleResultCards');
+      container.innerHTML = '';
+
+      top3.forEach((item, idx) => {
+        const sch = item.school;
+        const route = item.route;
+        const rankNum = idx + 1;
+        const kakaoUrl = getKakaoDirectionUrl(address, geo.lat, geo.lng, sch.name, sch.lat, sch.lng);
+        const naverUrl = getNaverDirectionUrl(address, geo.lat, geo.lng, sch.name, sch.lat, sch.lng);
+        
+        let rankBadgeColor = rankNum === 1 ? 'bg-emerald-600 text-white' : 'bg-brand-600 text-white';
+        let borderStyle = rankNum === 1 ? 'border-emerald-300 ring-2 ring-emerald-100 bg-emerald-50/20' : 'border-stone-200';
+
+        const card = document.createElement('div');
+        card.className = `p-4 rounded-xl border bg-white shadow-sm transition ${borderStyle}`;
+        card.innerHTML = `
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex items-center gap-3">
+              <span class="${rankBadgeColor} font-black text-xs px-2.5 py-1 rounded-lg shrink-0">${rankNum}순위</span>
+              <div>
+                <h4 class="font-bold text-stone-900 text-base flex items-center gap-2">
+                  ${sch.name}
+                  <span class="text-xs font-normal text-stone-500">(${sch.gender})</span>
+                  ${sch.hasSpecialClass ? '<span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-300">특수학급 설치교</span>' : '<span class="text-[10px] bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full">미설치교</span>'}
+                </h4>
+                <p class="text-xs text-stone-600 mt-1 flex items-center gap-1 font-medium">
+                  <i data-lucide="compass" class="w-3.5 h-3.5 text-brand-600"></i> ${route.routesInfo}
+                </p>
+                <div class="mt-2.5 flex items-center gap-2">
+                  <a href="${kakaoUrl}" target="_blank" class="text-[11px] bg-kakao-yellow hover:bg-amber-400 text-kakao-dark font-bold px-3 py-1.5 rounded-lg shadow-xs flex items-center gap-1 border border-amber-300">
+                    <i data-lucide="navigation" class="w-3.5 h-3.5"></i> 카카오맵 길찾기
+                  </a>
+                  <a href="${naverUrl}" target="_blank" class="text-[11px] bg-naver-green hover:bg-naver-dark text-white font-bold px-3 py-1.5 rounded-lg shadow-xs flex items-center gap-1">
+                    <i data-lucide="map-pin" class="w-3.5 h-3.5"></i> 네이버지도 길찾기
+                  </a>
+                </div>
+              </div>
+            </div>
+            
+            <div class="text-right shrink-0 bg-stone-50 p-2.5 rounded-xl border border-stone-200">
+              <span class="inline-block text-xs font-bold px-2.5 py-0.5 rounded-full ${route.mode === 'walk' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-blue-100 text-blue-800 border border-blue-300'}">
+                ${route.modeText}
+              </span>
+              <p class="text-xl font-black text-brand-800 mt-1">${route.distanceText}</p>
+              <p class="text-xs font-bold text-stone-600">${route.timeText}</p>
+            </div>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+
+      renderKakaoMapObjects(geo, address, top3);
+      lucide.createIcons();
+    }
+
+    function renderKakaoMapObjects(geo, address, top3) {
+      if (!window.kakao || !window.kakao.maps) {
+        initKakaoMap();
+        return;
+      }
+
+      const container = document.getElementById('singleKakaoMap');
+      if (!kakaoMap) {
+        const options = {
+          center: new kakao.maps.LatLng(geo.lat, geo.lng),
+          level: 5
+        };
+        kakaoMap = new kakao.maps.Map(container, options);
+      }
+
+      kakaoOverlays.forEach(o => o.setMap(null));
+      kakaoOverlays = [];
+      kakaoPolylines.forEach(p => p.setMap(null));
+      kakaoPolylines = [];
+
+      const bounds = new kakao.maps.LatLngBounds();
+      const homePos = new kakao.maps.LatLng(geo.lat, geo.lng);
+      bounds.extend(homePos);
+
+      const homeContent = document.createElement('div');
+      homeContent.innerHTML = `
+        <div style="background-color:#ef4444; color:white; border-radius:50%; width:32px; height:32px; display:flex; align-items:center; justify-content:center; font-weight:bold; box-shadow:0 2px 6px rgba(0,0,0,0.4); border:2px solid #fff;">
+          🏠
+        </div>
+      `;
+      const homeOverlay = new kakao.maps.CustomOverlay({
+        position: homePos,
+        content: homeContent,
+        yAnchor: 1.1
+      });
+      homeOverlay.setMap(kakaoMap);
+      kakaoOverlays.push(homeOverlay);
+
+      top3.forEach((item, idx) => {
+        const schPos = new kakao.maps.LatLng(item.school.lat, item.school.lng);
+        bounds.extend(schPos);
+
+        const color = idx === 0 ? '#059669' : (idx === 1 ? '#2563eb' : '#4f46e5');
+        const schContent = document.createElement('div');
+        schContent.innerHTML = `
+          <div style="background-color:${color}; color:white; border-radius:20px; padding:3px 8px; font-weight:bold; font-size:11px; box-shadow:0 2px 6px rgba(0,0,0,0.35); border:1.5px solid #fff; white-space:nowrap;">
+            ${idx+1}위 ${item.school.name} (${item.route.distanceText})
+          </div>
+        `;
+
+        const schOverlay = new kakao.maps.CustomOverlay({
+          position: schPos,
+          content: schContent,
+          yAnchor: 1.3
+        });
+        schOverlay.setMap(kakaoMap);
+        kakaoOverlays.push(schOverlay);
+
+        const polyline = new kakao.maps.Polyline({
+          path: [homePos, schPos],
+          strokeWeight: idx === 0 ? 4 : 2.5,
+          strokeColor: color,
+          strokeOpacity: idx === 0 ? 0.9 : 0.6,
+          strokeStyle: idx === 0 ? 'solid' : 'dashed'
+        });
+        polyline.setMap(kakaoMap);
+        kakaoPolylines.push(polyline);
+      });
+
+      kakaoMap.setBounds(bounds);
+    }
+
+    /* ==========================================================================
+       6. SCHOOL MASTER LIST MANAGEMENT
+       ========================================================================== */
+    function handleSchoolExcelUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        try {
+          const data = new Uint8Array(evt.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+          const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+          if (json.length < 2) {
+            showToast('학교 목록 엑셀 데이터가 부족합니다.');
+            return;
+          }
+
+          const header = json[0].map(h => String(h || '').trim());
+          const idxRegion = header.findIndex(h => h.includes('지역'));
+          const idxName = header.findIndex(h => h.includes('학교') || h.includes('교명'));
+          const idxGender = header.findIndex(h => h.includes('성별') || h.includes('남녀'));
+          const idxSpecial = header.findIndex(h => h.includes('특수') || h.includes('설치'));
+          const idxLat = header.findIndex(h => h.includes('위도') || h.toLowerCase().includes('lat') || h.includes('Y'));
+          const idxLng = header.findIndex(h => h.includes('경도') || h.toLowerCase().includes('lng') || h.includes('X'));
+          const idxBus = header.findIndex(h => h.includes('버스') || h.includes('교통'));
+
+          let newMasterList = [];
+          for (let i = 1; i < json.length; i++) {
+            const row = json[i];
+            if (!row || row.length === 0) continue;
+
+            const name = idxName !== -1 ? String(row[idxName] || '').trim() : String(row[1] || row[0] || '').trim();
+            if (!name) continue;
+
+            let gender = idxGender !== -1 ? String(row[idxGender] || '').trim() : '남녀공학';
+            if (gender.includes('남녀') || gender.includes('공학')) gender = '남녀공학';
+            else if (gender.includes('남')) gender = '남학교';
+            else if (gender.includes('여')) gender = '여학교';
+
+            let specialVal = idxSpecial !== -1 ? String(row[idxSpecial] || '').trim() : '설치';
+            let hasSpecial = !specialVal.includes('미설치') && !specialVal.includes('X') && !specialVal.includes('무');
+
+            let lat = idxLat !== -1 ? parseFloat(row[idxLat]) : null;
+            let lng = idxLng !== -1 ? parseFloat(row[idxLng]) : null;
+
+            if (!lat || isNaN(lat)) lat = 37.49 + (i * 0.002);
+            if (!lng || isNaN(lng)) lng = 126.94 + (i * 0.002);
+
+            let bus = idxBus !== -1 && row[idxBus] ? String(row[idxBus]).trim() : '관내 노선 버스';
+            let region = idxRegion !== -1 && row[idxRegion] ? String(row[idxRegion]).trim() : '관내';
+
+            newMasterList.push({
+              id: Date.now() + i,
+              region: region,
+              name: name,
+              gender: gender,
+              hasSpecialClass: hasSpecial,
+              lat: lat,
+              lng: lng,
+              busRoutes: bus
+            });
+          }
+
+          if (newMasterList.length > 0) {
+            schoolMasterList = newMasterList;
+            renderSchoolModalTable();
+            updateSchoolBadgeCount();
+            
+            if (studentList.length > 0 && studentList[0].calculated) {
+              calculateBatchAll();
+            }
+            
+            showToast(`'${file.name}'에서 중학교 ${schoolMasterList.length}곳이 등록되었습니다.`);
+          }
+        } catch (err) {
+          console.error(err);
+          showToast('학교 엑셀 파일 처리 중 오류가 발생했습니다.');
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function downloadSchoolTemplate() {
+      const template = [
+        ['지역', '학교명', '위도', '경도', '남녀공학 구분', '특수학급설치여부', '추천교통편'],
+        ['동작구', '강남중학교', 37.50270552, 126.9228068, '남녀공학', '설치', '동작03, 5531'],
+        ['동작구', '강현중학교', 37.50306004, 126.9307637, '남녀공학', '설치', '504, 642, 6515'],
+        ['관악구', '관악중학교', 37.48067154, 126.9619122, '남녀공학', '설치', '5524, 관악04'],
+        ['관악구', '남강중학교', 37.47160058, 126.9250681, '남학교', '미설치', '506, 관악06']
+      ];
+      const worksheet = XLSX.utils.aoa_to_sheet(template);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "관내중학교목록");
+      XLSX.writeFile(workbook, `관내_중학교_목록(위도경도)_카카오·네이버_표준양식.xlsx`);
+      showToast('표준 양식이 다운로드되었습니다.');
+    }
+
+    function renderSchoolModalTable() {
+      const tbody = document.getElementById('schoolModalTableBody');
+      tbody.innerHTML = '';
+
+      schoolMasterList.forEach((s, idx) => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-stone-50';
+        tr.innerHTML = `
+          <td class="p-2.5 font-bold text-stone-800">${s.name}</td>
+          <td class="p-2.5 text-stone-600">${s.region || ''} ${s.gender}</td>
+          <td class="p-2.5 text-center">
+            ${s.hasSpecialClass ? '<span class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-300">설치교</span>' : '<span class="bg-stone-100 text-stone-500 text-[10px] px-2 py-0.5 rounded-full">미설치</span>'}
+          </td>
+          <td class="p-2.5 font-mono text-stone-500">${s.lat.toFixed(5)}</td>
+          <td class="p-2.5 font-mono text-stone-500">${s.lng.toFixed(5)}</td>
+          <td class="p-2.5 text-center">
+            <button onclick="deleteSchoolMaster(${idx})" class="text-red-500 hover:text-red-700 p-1"><i data-lucide="x-circle" class="w-4 h-4"></i></button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+      lucide.createIcons();
+    }
+
+    function deleteSchoolMaster(index) {
+      const removed = schoolMasterList.splice(index, 1);
+      renderSchoolModalTable();
+      updateSchoolBadgeCount();
+      showToast(`${removed[0].name}이(가) 삭제되었습니다.`);
+    }
+
+    function addSchoolFromModal() {
+      const name = document.getElementById('newSchoolName').value.trim();
+      const type = document.getElementById('newSchoolType').value;
+      const special = document.getElementById('newSchoolSpecial').value === '설치';
+      const lat = parseFloat(document.getElementById('newSchoolLat').value);
+      const lng = parseFloat(document.getElementById('newSchoolLng').value);
+
+      if (!name || isNaN(lat) || isNaN(lng)) {
+        showToast('학교명과 올바른 위도/경도를 입력하세요.');
+        return;
+      }
+
+      schoolMasterList.push({
+        id: Date.now(),
+        region: '관내',
+        name: name,
+        gender: type,
+        hasSpecialClass: special,
+        lat: lat,
+        lng: lng,
+        busRoutes: '시내버스 / 마을버스'
+      });
+
+      document.getElementById('newSchoolName').value = '';
+      document.getElementById('newSchoolLat').value = '';
+      document.getElementById('newSchoolLng').value = '';
+
+      renderSchoolModalTable();
+      updateSchoolBadgeCount();
+      showToast(`${name}이(가) 추가되었습니다.`);
+    }
+
+    function updateSchoolBadgeCount() {
+      const badge = document.getElementById('schoolCountBadge');
+      if (badge) badge.innerText = schoolMasterList.length;
+
+      const statusText = document.getElementById('schoolStatusText');
+      if (statusText) {
+        const specialCount = schoolMasterList.filter(s => s.hasSpecialClass).length;
+        statusText.innerText = `관내 중학교 ${schoolMasterList.length}곳 등록됨 (특수학급 설치교 ${specialCount}곳)`;
+      }
+    }
+
+    function openSchoolManagerModal() {
+      renderSchoolModalTable();
+      document.getElementById('schoolModal').classList.remove('hidden');
+    }
+
+    function closeSchoolManagerModal() {
+      document.getElementById('schoolModal').classList.add('hidden');
+    }
+
+    function openHelpModal() {
+      document.getElementById('helpModal').classList.remove('hidden');
+    }
+
+    function closeHelpModal() {
+      document.getElementById('helpModal').classList.add('hidden');
+    }
+
+    /* ==========================================================================
+       7. STUDENT EDIT MODAL
+       ========================================================================== */
+    function openEditStudentModal(index) {
+      const s = studentList[index];
+      if (!s) return;
+
+      document.getElementById('editStudentIndex').value = index;
+      document.getElementById('editStudentGender').value = s.gender;
+      document.getElementById('editStudentAddress').value = s.address;
+      document.getElementById('editStudentPlacement').value = s.placementType;
+
+      const choices = ['editStudentChoice1', 'editStudentChoice2', 'editStudentChoice3'];
+      choices.forEach((id, cIdx) => {
+        const select = document.getElementById(id);
+        select.innerHTML = '<option value="">(자동 산출 추천교)</option>';
+        schoolMasterList.forEach(sch => {
+          const opt = document.createElement('option');
+          opt.value = sch.name;
+          opt.innerText = `${sch.name} ${sch.hasSpecialClass ? '[특수학급]' : ''} (${sch.gender})`;
+          select.appendChild(opt);
+        });
+
+        if (cIdx === 0) select.value = s.choice1 || '';
+        if (cIdx === 1) select.value = s.choice2 || '';
+        if (cIdx === 2) select.value = s.choice3 || '';
+      });
+
+      document.getElementById('editStudentModal').classList.remove('hidden');
+    }
+
+    function closeEditStudentModal() {
+      document.getElementById('editStudentModal').classList.add('hidden');
+    }
+
+    async function saveStudentEdit() {
+      const idx = document.getElementById('editStudentIndex').value;
+      if (idx === '' || !studentList[idx]) return;
+
+      const s = studentList[idx];
+      s.gender = document.getElementById('editStudentGender').value;
+      s.address = document.getElementById('editStudentAddress').value;
+      s.placementType = document.getElementById('editStudentPlacement').value;
+      s.choice1 = document.getElementById('editStudentChoice1').value;
+      s.choice2 = document.getElementById('editStudentChoice2').value;
+      s.choice3 = document.getElementById('editStudentChoice3').value;
+
+      if (s.calculated) {
+        const geo = await geocodeAddress(s.address);
+        s.geo = geo;
+        s.top3 = await rankSchoolsForAddress(geo.lat, geo.lng, s.gender, s.placementType);
+      }
+
+      closeEditStudentModal();
+      renderBatchTable();
+      updateBatchAnalytics();
+      showToast('학생 정보가 수정되었습니다.');
+    }
+
+    function showToast(msg) {
+      let toast = document.getElementById('toastNotification');
+      if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'toastNotification';
+        toast.className = 'fixed bottom-5 right-5 bg-stone-800 text-white text-xs font-semibold px-4 py-3 rounded-xl shadow-xl z-50 transition-all transform opacity-0 translate-y-2 flex items-center gap-2 pointer-events-none';
+        document.body.appendChild(toast);
+      }
+      toast.innerHTML = `<i data-lucide="info" class="w-4 h-4 text-amber-400"></i><span>${msg}</span>`;
+      lucide.createIcons();
+
+      toast.classList.remove('opacity-0', 'translate-y-2', 'pointer-events-none');
+      toast.classList.add('opacity-100', 'translate-y-0');
+
+      setTimeout(() => {
+        toast.classList.remove('opacity-100', 'translate-y-0');
+        toast.classList.add('opacity-0', 'translate-y-2', 'pointer-events-none');
+      }, 3000);
+    }
+
+    /* ==========================================================================
+       8. INITIALIZATION
+       ========================================================================== */
+    window.onload = function() {
+      lucide.createIcons();
+      updateSchoolBadgeCount();
+      loadKakaoMapSdk();
+      switchTab('batch');
+    };
+  </script>
+</body>
+</html>
