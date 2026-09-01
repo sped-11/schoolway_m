@@ -65,6 +65,8 @@
        - ODsay는 별도 키가 필요할 수 있습니다.
        ========================================================================== */
     const MASTER_DEFAULT_KAKAO_KEY = "7e9c14461426ba5f1b9c3944c7b03a03"
+    const MASTER_DEFAULT_KAKAO_REST_KEY = ""
+    const MASTER_DEFAULT_ODSAY_KEY = ""
   </script>
 
   <style>
@@ -591,6 +593,7 @@
 
     // 백엔드 API 설정 로드
     let kakaoApiKey = MASTER_DEFAULT_KAKAO_KEY || localStorage.getItem('schoolway_kakao_key') || '';
+    let kakaoRestApiKey = MASTER_DEFAULT_KAKAO_REST_KEY || localStorage.getItem('schoolway_kakao_rest_key') || '';
     let odsayApiKey = MASTER_DEFAULT_ODSAY_KEY || localStorage.getItem('schoolway_odsay_key') || '';
 
     /* ==========================================================================
@@ -627,8 +630,9 @@
       };
       script.onerror = () => {
         if (statusEl) {
-          statusEl.innerText = '카카오맵 연동 실패: 앱 키를 확인해 주세요';
+          statusEl.innerText = '카카오맵 연동 실패: 앱 키/허용 도메인을 확인해 주세요';
         }
+        console.error('Kakao Maps SDK failed to load. Check app key and allowed domains for this origin.');
       };
       document.head.appendChild(script);
     }
@@ -750,11 +754,72 @@
       return { lat: 37.490 + latOffset, lng: 126.940 + lngOffset };
     }
 
+    async function fetchKakaoDirectionsSummary(lat, lng, school, mode = 'walk') {
+      const apiBaseUrl = window.location.protocol === 'file:' ? 'http://localhost:3000' : window.location.origin;
+      const params = new URLSearchParams({
+        origin: `${lng},${lat}`,
+        destination: `${school.lng},${school.lat}`,
+        mode: mode === 'walk' ? 'WALK' : 'TRANSIT',
+        priority: 'RECOMMEND'
+      });
+
+      try {
+        const response = await fetch(`${apiBaseUrl}/api/directions?${params.toString()}`);
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          console.warn('Proxy route request failed:', response.status, errorData);
+          return null;
+        }
+
+        const data = await response.json();
+        const route = Array.isArray(data?.routes) && data.routes.length ? data.routes[0] : null;
+        if (!route) return null;
+
+        const summary = route.summary || {};
+        const distanceMeters = Number(summary.distance) || 0;
+        const durationSeconds = Number(summary.duration) || 0;
+
+        if (!distanceMeters && !durationSeconds) return null;
+
+        return {
+          mode,
+          distanceMeters: Math.max(1, Math.round(distanceMeters || 0)),
+          durationSeconds: Math.max(1, Math.round(durationSeconds || 0)),
+          routesInfo: mode === 'walk' ? '실시간 카카오 경로 기준 보행 경로' : (school.busRoutes || '실시간 카카오 경로 기준 대중교통 경로')
+        };
+      } catch (error) {
+        console.warn('Kakao Directions API unavailable, falling back to heuristic route estimate:', error);
+        return null;
+      }
+    }
+
     async function getKakaoTravelRoute(lat, lng, school) {
       const direct = calculateHaversineDistance(lat, lng, school.lat, school.lng);
       const roadDistKm = direct * 1.32;
       const distMeters = Math.round(roadDistKm * 1000);
-      const isWalkable = distMeters < 2000; // 2km 분기
+      const isWalkable = distMeters < 2000;
+      const mode = isWalkable ? 'walk' : 'transit';
+
+      const actualRoute = await fetchKakaoDirectionsSummary(lat, lng, school, mode);
+      if (actualRoute) {
+        const minutes = Math.max(1, Math.round(actualRoute.durationSeconds / 60));
+        const displayDist = actualRoute.distanceMeters < 1000
+          ? `${actualRoute.distanceMeters} m`
+          : `${(actualRoute.distanceMeters / 1000).toFixed(2)} km`;
+
+        return {
+          mode,
+          modeText: mode === 'walk' ? '🚶 도보 기준' : '🚌 대중교통 기준',
+          distanceMeters: actualRoute.distanceMeters,
+          distanceKm: (actualRoute.distanceMeters / 1000).toFixed(2),
+          distanceText: displayDist,
+          timeMins: minutes,
+          timeText: mode === 'walk' ? `도보 약 ${minutes}분` : `대중교통 약 ${minutes}분`,
+          routesInfo: actualRoute.routesInfo,
+          isKakaoRoute: true,
+          source: 'kakao-directions'
+        };
+      }
 
       if (isWalkable) {
         const mins = Math.max(3, Math.round(distMeters / 67));
@@ -769,7 +834,8 @@
           timeMins: mins,
           timeText: `도보 약 ${mins}분`,
           routesInfo: '인도/횡단보도 추천 보행로',
-          isKakaoRoute: true
+          isKakaoRoute: true,
+          source: 'heuristic'
         };
       } else {
         const transitKmStr = (distMeters / 1000).toFixed(2);
@@ -784,7 +850,8 @@
           timeMins: transitMins,
           timeText: `대중교통 약 ${transitMins}분`,
           routesInfo: school.busRoutes ? school.busRoutes : '관내 노선 버스 / 지하철',
-          isKakaoRoute: true
+          isKakaoRoute: true,
+          source: 'heuristic'
         };
       }
     }
@@ -1186,15 +1253,38 @@
        ========================================================================= */
     async function searchSingleAddress() {
       const input = document.getElementById('singleAddressInput');
+      const statusEl = document.getElementById('kakaoMapStatus');
       const address = input.value.trim();
       if (!address) {
         showToast('주소를 입력해주세요.');
         return;
       }
+
+      if (!window.kakao || !window.kakao.maps || !window.kakao.maps.services) {
+        if (statusEl) {
+          statusEl.innerText = '카카오맵 SDK 준비 중';
+        }
+        showToast('카카오맵 SDK가 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.');
+        return;
+      }
+
       showToast('경로 및 거리를 분석하고 있습니다...');
+      if (statusEl) {
+        statusEl.innerText = '주소 좌표 변환 중';
+      }
       const geo = await geocodeAddress(address);
+      if (!geo || !Number.isFinite(geo.lat) || !Number.isFinite(geo.lng)) {
+        if (statusEl) {
+          statusEl.innerText = '주소 좌표를 찾지 못했습니다';
+        }
+        showToast('입력하신 주소를 카카오로 찾지 못했습니다. 도로명 주소를 다시 확인해 주세요.');
+        return;
+      }
       const top3 = await rankSchoolsForAddress(geo.lat, geo.lng, '공학', '특수학급');
       renderSingleResult(address, geo, top3);
+      if (statusEl) {
+        statusEl.innerText = '카카오맵 경로 표시 완료';
+      }
     }
 
     function setSingleAddress(addr) {
