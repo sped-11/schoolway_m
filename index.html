@@ -697,6 +697,13 @@
       return R * c;
     }
 
+    function getSchoolDisplayName(school) {
+      if (!school) return '';
+      const supportOffice = String(school.supportOffice || '').trim();
+      if (!supportOffice) return school.name;
+      return `${school.name} (${supportOffice})`;
+    }
+
     async function geocodeAddress(address) {
       if (!address) return { lat: 37.495, lng: 126.945 };
 
@@ -1104,7 +1111,7 @@
                 <div class="flex items-start justify-between gap-2">
                   <div class="flex items-center gap-1.5 min-w-0">
                     <span class="font-black ${isFirst ? 'text-emerald-900 text-base' : 'text-stone-800 text-sm'} leading-tight break-words" title="${sItem.school.name}">
-                      ${sItem.school.name}
+                      ${getSchoolDisplayName(sItem.school)}
                     </span>
                     ${!sItem.school.hasSpecialClass ? '<span class="text-[9px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold border border-red-200">미설치교</span>' : ''}
                   </div>
@@ -1317,7 +1324,7 @@
               <span class="${rankBadgeColor} font-black text-xs px-2.5 py-1 rounded-lg shrink-0">${rankNum}순위</span>
               <div>
                 <h4 class="font-bold text-stone-900 text-base flex items-center gap-2">
-                  ${sch.name}
+                  ${getSchoolDisplayName(sch)}
                   <span class="text-xs font-normal text-stone-500">(${sch.gender})</span>
                   ${sch.hasSpecialClass ? '<span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-300">특수학급 설치교</span>' : '<span class="text-[10px] bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full">미설치교</span>'}
                 </h4>
@@ -1397,7 +1404,7 @@
         const schContent = document.createElement('div');
         schContent.innerHTML = `
           <div style="background-color:${color}; color:white; border-radius:20px; padding:3px 8px; font-weight:bold; font-size:11px; box-shadow:0 2px 6px rgba(0,0,0,0.35); border:1.5px solid #fff; white-space:nowrap;">
-            ${idx+1}위 ${item.school.name} (${item.route.distanceText})
+            ${idx+1}위 ${getSchoolDisplayName(item.school)} (${item.route.distanceText})
           </div>
         `;
 
@@ -1476,10 +1483,13 @@
 
             let bus = idxBus !== -1 && row[idxBus] ? String(row[idxBus]).trim() : '관내 노선 버스';
             let region = idxRegion !== -1 && row[idxRegion] ? String(row[idxRegion]).trim() : '관내';
+            let supportOfficeIndex = header.findIndex(h => /비고|지원청|지원청명|관할|담당|지원청/.test(String(h || '').trim()));
+            let supportOffice = supportOfficeIndex !== -1 ? String(row[supportOfficeIndex] || '').trim() : '';
 
             newMasterList.push({
               id: Date.now() + i,
               region: region,
+              supportOffice: supportOffice,
               name: name,
               gender: gender,
               hasSpecialClass: hasSpecial,
@@ -1531,7 +1541,12 @@
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-stone-50';
         tr.innerHTML = `
-          <td class="p-2.5 font-bold text-stone-800">${s.name}</td>
+          <td class="p-2.5 font-bold text-stone-800">
+            <div class="flex items-center gap-1.5">
+              <span>${s.name}</span>
+              ${s.supportOffice ? `<span class="text-[9px] bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded-full font-bold">${s.supportOffice}</span>` : ''}
+            </div>
+          </td>
           <td class="p-2.5 text-stone-600">${s.region || ''} ${s.gender}</td>
           <td class="p-2.5 text-center">
             ${s.hasSpecialClass ? '<span class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-300">설치교</span>' : '<span class="bg-stone-100 text-stone-500 text-[10px] px-2 py-0.5 rounded-full">미설치</span>'}
@@ -1633,7 +1648,7 @@
         schoolMasterList.forEach(sch => {
           const opt = document.createElement('option');
           opt.value = sch.name;
-          opt.innerText = `${sch.name} ${sch.hasSpecialClass ? '[특수학급]' : ''} (${sch.gender})`;
+          opt.innerText = `${sch.name}${sch.supportOffice ? ` (${sch.supportOffice})` : ''} ${sch.hasSpecialClass ? '[특수학급]' : ''} (${sch.gender})`;
           select.appendChild(opt);
         });
 
