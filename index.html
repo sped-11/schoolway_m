@@ -87,6 +87,16 @@
       border: 1px solid #e2e8f0;
     }
 
+    .batch-column-controls {
+      background: linear-gradient(180deg, #fdfbf7 0%, #f7f2e8 100%);
+      border: 1px solid #e3cea9;
+    }
+
+    .batch-column-controls input[type="range"] {
+      accent-color: #c59a56;
+      width: 100%;
+    }
+
     /* Kakao Map Custom Overlay Styles */
     .kakao-custom-overlay {
       position: relative;
@@ -165,7 +175,7 @@
     </div>
   </header>
 
-  <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5">
+  <main class="flex-grow w-full mx-auto px-4 sm:px-6 lg:px-8 py-5">
 
     <!-- Status & School File Quick Banner -->
     <div class="bg-brand-100 border border-brand-300 p-3.5 rounded-xl mb-5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-sm">
@@ -279,18 +289,18 @@
 
       <!-- Main Batch Table -->
       <div class="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
-        <div class="overflow-x-auto">
-          <table class="w-full text-left border-collapse text-sm">
+        <div class="overflow-x-hidden">
+          <table class="w-full text-left border-collapse text-sm" style="table-layout: fixed; width: 100%;">
             <thead>
               <tr class="bg-stone-100 text-stone-700 border-b border-stone-200 font-semibold text-xs uppercase tracking-wider">
-                <th class="py-3.5 px-2.5 text-center w-12">번호</th>
-                <th class="py-3.5 px-2.5 text-center w-12">성별</th>
-                <th class="py-3.5 px-3">주민등록상 주소지</th>
-                <th class="py-3.5 px-2 text-center w-24">배치구분</th>
-                <th class="py-3.5 px-3 bg-emerald-50/80 w-72 border-l border-r border-emerald-200">1지망 (최근접 추천교)</th>
-                <th class="py-3.5 px-3 w-64">2지망 추천교</th>
-                <th class="py-3.5 px-3 w-64">3지망 추천교</th>
-                <th class="py-3.5 px-2 text-center w-24">관리</th>
+                <th class="py-3.5 px-2.5 text-center" style="width: 5%; min-width: 40px;">번호</th>
+                <th class="py-3.5 px-2.5 text-center" style="width: 5%; min-width: 40px;">성별</th>
+                <th class="py-3.5 px-3" style="width: 26%; min-width: 200px;">주민등록상 주소지</th>
+                <th class="py-3.5 px-2 text-center" style="width: 8%; min-width: 80px;">배치구분</th>
+                <th class="py-3.5 px-3 bg-emerald-50/80 border-l border-r border-emerald-200" style="width: 22%; min-width: 180px;">1지망 (최근접 추천교)</th>
+                <th class="py-3.5 px-3" style="width: 17%; min-width: 160px;">2지망 추천교</th>
+                <th class="py-3.5 px-3" style="width: 17%; min-width: 160px;">3지망 추천교</th>
+                <th class="py-3.5 px-2 text-center" style="width: 10%; min-width: 90px;">관리</th>
               </tr>
             </thead>
             <tbody id="batchTableBody" class="divide-y divide-stone-200 text-stone-800 font-normal">
@@ -773,17 +783,20 @@
           distanceText: `${transitKmStr} km`,
           timeMins: transitMins,
           timeText: `대중교통 약 ${transitMins}분`,
-          routesInfo: school.busRoutes ? `추천노선: ${school.busRoutes}` : '관내 노선 버스 / 지하철',
+          routesInfo: school.busRoutes ? school.busRoutes : '관내 노선 버스 / 지하철',
           isKakaoRoute: true
         };
       }
     }
 
     async function rankSchoolsForAddress(lat, lng, studentGender = '공학', placementType = '특수학급') {
+      const normalizedPlacement = String(placementType || '특수학급').trim();
+      const specialOnlyPlacements = new Set(['특수학급', '특수학교']);
+
       let filtered = schoolMasterList.filter(s => {
         if (studentGender === '남' && s.gender === '여학교') return false;
         if (studentGender === '여' && s.gender === '남학교') return false;
-        if (placementType === '특수학급' && !s.hasSpecialClass) return false;
+        if (specialOnlyPlacements.has(normalizedPlacement) && !s.hasSpecialClass) return false;
         return true;
       });
 
@@ -791,12 +804,12 @@
         filtered = schoolMasterList;
       }
 
-      let initialRanked = filtered.map(school => {
-        const straight = calculateHaversineDistance(lat, lng, school.lat, school.lng);
-        return { school, straight };
-      }).sort((a, b) => a.straight - b.straight).slice(0, 5);
+      const initialRanked = filtered
+        .map(school => ({ school, straight: calculateHaversineDistance(lat, lng, school.lat, school.lng) }))
+        .sort((a, b) => a.straight - b.straight)
+        .slice(0, 5);
 
-      let finalResults = [];
+      const finalResults = [];
       for (const item of initialRanked) {
         const route = await getKakaoTravelRoute(lat, lng, item.school);
         finalResults.push({ school: item.school, route });
@@ -805,6 +818,7 @@
       finalResults.sort((a, b) => a.route.timeMins - b.route.timeMins || a.route.distanceMeters - b.route.distanceMeters);
       return finalResults.slice(0, 3);
     }
+
 
     // 1) 카카오맵 길찾기 URL 생성
     function getKakaoDirectionUrl(sAddr, sLat, sLng, schoolName, eLat, eLng) {
@@ -978,6 +992,8 @@
         return;
       }
 
+      const schoolMap = new Map(schoolMasterList.map(school => [school.name, school]));
+
       studentList.forEach((student, index) => {
         const row = document.createElement('tr');
         row.className = 'hover:bg-stone-50 transition border-b border-stone-200 text-xs';
@@ -990,7 +1006,7 @@
           row.innerHTML = `
             <td class="py-3 px-2 text-center text-stone-500 font-mono">${student.id || index + 1}</td>
             <td class="py-3 px-2 text-center font-bold text-stone-700">${student.gender}</td>
-            <td class="py-3 px-3 text-stone-600 font-mono">${student.address}</td>
+            <td class="py-3 px-3 text-stone-600 font-mono text-[11px] leading-relaxed break-words whitespace-normal" title="${student.address}" style="width: 26%; min-width: 200px; max-width: 26%;">${student.address}</td>
             <td class="py-3 px-2 text-center">
               <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${placeBadge}">${student.placementType}</span>
             </td>
@@ -1007,27 +1023,25 @@
           const s2 = student.top3[1];
           const s3 = student.top3[2];
 
-          const getSchoolInfo = (schoolName) => schoolMasterList.find(s => s.name === schoolName);
-
-          const sch1 = getSchoolInfo(student.choice1);
-          const sch2 = getSchoolInfo(student.choice2);
-          const sch3 = getSchoolInfo(student.choice3);
-
-          const makeChoiceHtml = (sch, sItem, isFirst = false) => {
+          const getSchoolInfo = (schoolName) => schoolMap.get(schoolName);
+          const makeChoiceHtml = (sItem, isFirst = false) => {
             if (!sItem) return '<span class="text-stone-300">-</span>';
-            const r = sItem.route;
+
+            const route = sItem.route;
             const geo = student.geo || { lat: 37.49, lng: 126.94 };
             const kakaoUrl = getKakaoDirectionUrl(student.address, geo.lat, geo.lng, sItem.school.name, sItem.school.lat, sItem.school.lng);
             const naverUrl = getNaverDirectionUrl(student.address, geo.lat, geo.lng, sItem.school.name, sItem.school.lat, sItem.school.lng);
 
             return `
-              <div class="space-y-1.5 py-1">
-                <div class="flex items-center justify-between gap-1">
-                  <span class="font-extrabold ${isFirst ? 'text-emerald-950 text-sm' : 'text-stone-800 text-xs'} truncate" title="${sItem.school.name}">
-                    ${sItem.school.name}
-                  </span>
-                  <div class="flex items-center gap-1 shrink-0">
-                    ${sItem.school.hasSpecialClass ? '<span class="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold border border-emerald-300">특수학급</span>' : (student.placementType === '특수학급' ? '<span class="text-[9px] bg-red-100 text-red-800 px-1 rounded font-bold">미설치</span>' : '')}
+              <div class="space-y-2 py-1.5">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="flex items-center gap-1.5 min-w-0">
+                    <span class="font-black ${isFirst ? 'text-emerald-900 text-base' : 'text-stone-800 text-sm'} leading-tight break-words" title="${sItem.school.name}">
+                      ${sItem.school.name}
+                    </span>
+                    ${!sItem.school.hasSpecialClass ? '<span class="text-[9px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold border border-red-200">미설치교</span>' : ''}
+                  </div>
+                  <div class="flex items-center gap-1 shrink-0 flex-wrap justify-end">
                     <a href="${kakaoUrl}" target="_blank" title="카카오맵 실시간 길찾기" class="inline-flex items-center bg-kakao-yellow hover:bg-amber-400 text-kakao-dark text-[10px] font-bold px-1.5 py-0.5 rounded shadow-xs border border-amber-300">
                       카카오
                     </a>
@@ -1037,20 +1051,19 @@
                   </div>
                 </div>
 
-                <!-- 거리 및 소요 시간 영역 -->
-                <div class="p-1.5 rounded-lg ${isFirst ? 'dist-badge-first shadow-xs' : 'dist-badge-sub'}">
-                  <div class="flex items-baseline justify-between gap-1">
-                    <span class="${isFirst ? 'text-emerald-700 font-black text-sm' : 'text-stone-800 font-extrabold text-xs'}">
-                      📍 ${r.distanceText}
+                <div class="p-2 rounded-lg ${isFirst ? 'dist-badge-first shadow-xs' : 'dist-badge-sub'}">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="${isFirst ? 'text-emerald-700 font-black text-[15px]' : 'text-stone-800 font-extrabold text-[13px]'}">
+                      📍 ${route.distanceText}
                     </span>
-                    <span class="font-bold ${isFirst ? 'text-emerald-900 text-xs' : 'text-stone-600 text-[11px]'}">
-                      ⏱️ ${r.timeText}
+                    <span class="font-bold ${isFirst ? 'text-emerald-900 text-[11px]' : 'text-stone-600 text-[10px]'}">
+                      ⏱️ ${route.timeText}
                     </span>
                   </div>
-                  <div class="text-[10px] text-stone-500 truncate mt-0.5 flex items-center justify-between" title="${r.routesInfo}">
-                    <span class="truncate">${r.routesInfo}</span>
-                    <span class="text-[9px] font-bold px-1 rounded ${r.mode === 'walk' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'} shrink-0 ml-1">
-                      ${r.modeText}
+                  <div class="text-[10px] text-stone-500 mt-1.5 flex items-center justify-between gap-2" title="${route.routesInfo}">
+                    <span class="truncate">${route.routesInfo}</span>
+                    <span class="text-[9px] font-bold px-1.5 py-0.5 rounded ${route.mode === 'walk' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'} shrink-0">
+                      ${route.modeText}
                     </span>
                   </div>
                 </div>
@@ -1058,32 +1071,38 @@
             `;
           };
 
+          const sch1 = getSchoolInfo(student.choice1);
+          const sch2 = getSchoolInfo(student.choice2);
+          const sch3 = getSchoolInfo(student.choice3);
+
           row.innerHTML = `
             <td class="py-2.5 px-2 text-center text-stone-500 font-mono">${student.id || index + 1}</td>
             <td class="py-2.5 px-2 text-center font-bold text-stone-700">${student.gender}</td>
-            <td class="py-2.5 px-3 text-stone-600 font-mono text-[11px] truncate max-w-[130px]" title="${student.address}">${student.address}</td>
+            <td class="py-2.5 px-3 text-stone-600 font-mono text-[11px] leading-relaxed break-words whitespace-normal" title="${student.address}" style="width: 26%; min-width: 200px; max-width: 26%;">${student.address}</td>
             <td class="py-2.5 px-2 text-center">
               <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${placeBadge}">${student.placementType}</span>
             </td>
             
-            <td class="py-2 px-2.5 bg-emerald-50/40 border-l border-r border-emerald-200">
-              ${makeChoiceHtml(sch1, s1, true)}
+            <td class="py-2 px-2.5 bg-emerald-50/40 border-l border-r border-emerald-200" style="width: 22%; min-width: 180px; max-width: 22%;">
+              ${makeChoiceHtml(s1, true)}
             </td>
 
-            <td class="py-2 px-2.5">
-              ${makeChoiceHtml(sch2, s2, false)}
+            <td class="py-2 px-2.5" style="width: 17%; min-width: 160px; max-width: 17%;">
+              ${makeChoiceHtml(s2)}
             </td>
 
-            <td class="py-2 px-2.5">
-              ${makeChoiceHtml(sch3, s3, false)}
+            <td class="py-2 px-2.5" style="width: 17%; min-width: 160px; max-width: 17%;">
+              ${makeChoiceHtml(s3)}
             </td>
 
-            <td class="py-2.5 px-2 text-center">
-              <div class="flex items-center justify-center gap-1">
-                <button onclick="openEditStudentModal(${index})" class="text-stone-600 hover:text-brand-600 p-1 font-semibold text-[11px] flex items-center gap-0.5 bg-stone-100 rounded px-1.5 py-1">
+            <td class="py-2.5 px-2 text-center align-middle">
+              <div class="flex flex-col items-center justify-center gap-1.5">
+                <button onclick="openEditStudentModal(${index})" class="text-stone-600 hover:text-brand-600 p-1 font-semibold text-[11px] flex items-center gap-0.5 bg-stone-100 rounded px-1.5 py-1 w-full">
                   <i data-lucide="edit-2" class="w-3.5 h-3.5"></i> 수정
                 </button>
-                <button onclick="removeStudent(${index})" class="text-stone-400 hover:text-red-600 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                <button onclick="removeStudent(${index})" class="text-stone-400 hover:text-red-600 p-1 w-full rounded bg-stone-50 hover:bg-red-50 flex items-center justify-center">
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
               </div>
             </td>
           `;
@@ -1093,6 +1112,8 @@
       });
 
       lucide.createIcons();
+      const schoolCount = document.getElementById('schoolCountBadge');
+      if (schoolCount) schoolCount.innerText = String(schoolMasterList.length);
     }
 
     function removeStudent(index) {
