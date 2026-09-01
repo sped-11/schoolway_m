@@ -222,6 +222,7 @@
             특수교육대상자 학급 일괄 통학거리 산출 & 길찾기 검증
           </h2>
           <p class="text-xs text-stone-500 mt-0.5">학생 주소지로부터 관내 중학교까지의 <strong>보행·대중교통 거리</strong>와 <strong>소요 시간</strong>을 산출하고 카카오/네이버 지도로 바로 확인합니다.</p>
+          <p class="text-[11px] text-stone-500 mt-1">1,2,3 지망교 옆 '카카오', '네이버' 버튼을 누르시면 각각의 지도로 연결됩니다.(참고용)</p>
         </div>
 
         <div class="flex flex-wrap items-center gap-2">
@@ -560,7 +561,7 @@
         </button>
       </div>
       <div class="space-y-3 text-xs text-stone-600 leading-relaxed">
-        <p><strong>1. 카카오맵 & 네이버지도 원클릭 연동:</strong> 각 지망 학교마다 <span class="bg-amber-300 text-stone-900 px-1 py-0.5 rounded font-bold text-[10px]">카카오</span> 및 <span class="bg-emerald-600 text-white px-1 py-0.5 rounded font-bold text-[10px]">네이버</span> 길찾기 버튼이 제공되어, 클릭 시 실시간 대중교통 및 보행 최적 경로를 새 창에서 바로 검증할 수 있습니다.</p>
+        <p><strong>1. 추천교 기준:</strong> 1~3지망 추천교의 거리와 소요시간은 <span class="bg-amber-300 text-stone-900 px-1 py-0.5 rounded font-bold text-[10px]">카카오맵 경로 기준</span>으로 산출됩니다. 카카오/네이버 버튼은 <span class="font-bold text-stone-800">참고용 외부 길찾기 링크</span>입니다.</p>
         <p><strong>2. 2km 분기 스마트 전환:</strong> 통학 거리가 2km 미만인 경우 '도보 기준'으로, 2km 이상인 경우 '대중교통 기준'으로 자동 전환되어 추천 노선과 통학 시간을 표시합니다.</p>
         <p><strong>3. 특수학급 우선 매칭:</strong> 학생의 배치구분이 '특수학급'인 경우, 관내 중학교 중 특수학급이 설치된 학교를 최우선으로 1~3지망 추천합니다.</p>
         <p><strong>4. 엑셀 업로드 및 다운로드:</strong> 전국 어느 시·도 교육청이든 관내 중학교 엑셀만 업로드하면 해당 지역 배정 시스템으로 즉시 자동 전환됩니다.</p>
@@ -762,7 +763,12 @@
     }
 
     async function fetchKakaoDirectionsSummary(lat, lng, school, mode = 'walk') {
-      const apiBaseUrl = window.location.protocol === 'file:' ? 'http://localhost:3000' : window.location.origin;
+      const VERCEL_API_BASE = window.SCHOOLWAY_API_BASE || (
+        window.location.hostname === 'localhost'
+          ? 'http://localhost:3000'
+          : 'https://schoolway-api.vercel.app'
+      );
+
       const params = new URLSearchParams({
         origin: `${lng},${lat}`,
         destination: `${school.lng},${school.lat}`,
@@ -771,7 +777,7 @@
       });
 
       try {
-        const response = await fetch(`${apiBaseUrl}/api/directions?${params.toString()}`);
+        const response = await fetch(`${VERCEL_API_BASE}/api/directions?${params.toString()}`);
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           console.warn('Proxy route request failed:', response.status, errorData);
@@ -1116,10 +1122,10 @@
                     ${!sItem.school.hasSpecialClass ? '<span class="text-[9px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold border border-red-200">미설치교</span>' : ''}
                   </div>
                   <div class="flex items-center gap-1 shrink-0 flex-wrap justify-end">
-                    <a href="${kakaoUrl}" target="_blank" title="카카오맵 실시간 길찾기" class="inline-flex items-center bg-kakao-yellow hover:bg-amber-400 text-kakao-dark text-[10px] font-bold px-1.5 py-0.5 rounded shadow-xs border border-amber-300">
+                    <a href="${kakaoUrl}" target="_blank" title="카카오맵 길찾기" class="inline-flex items-center bg-kakao-yellow hover:bg-amber-400 text-kakao-dark text-[10px] font-bold px-1.5 py-0.5 rounded shadow-xs border border-amber-300">
                       카카오
                     </a>
-                    <a href="${naverUrl}" target="_blank" title="네이버지도 실시간 길찾기" class="inline-flex items-center bg-naver-green hover:bg-naver-dark text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-xs">
+                    <a href="${naverUrl}" target="_blank" title="네이버지도 길찾기" class="inline-flex items-center bg-naver-green hover:bg-naver-dark text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-xs">
                       네이버
                     </a>
                   </div>
@@ -1333,10 +1339,10 @@
                 </p>
                 <div class="mt-2.5 flex items-center gap-2">
                   <a href="${kakaoUrl}" target="_blank" class="text-[11px] bg-kakao-yellow hover:bg-amber-400 text-kakao-dark font-bold px-3 py-1.5 rounded-lg shadow-xs flex items-center gap-1 border border-amber-300">
-                    <i data-lucide="navigation" class="w-3.5 h-3.5"></i> 카카오맵 길찾기
+                    <i data-lucide="navigation" class="w-3.5 h-3.5"></i> 카카오맵
                   </a>
                   <a href="${naverUrl}" target="_blank" class="text-[11px] bg-naver-green hover:bg-naver-dark text-white font-bold px-3 py-1.5 rounded-lg shadow-xs flex items-center gap-1">
-                    <i data-lucide="map-pin" class="w-3.5 h-3.5"></i> 네이버지도 길찾기
+                    <i data-lucide="map-pin" class="w-3.5 h-3.5"></i> 네이버지도
                   </a>
                 </div>
               </div>
