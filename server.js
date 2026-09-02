@@ -18,6 +18,41 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+app.get('/api/geocode', async (req, res) => {
+  const query = String(req.query.query || '').trim();
+  if (!query) {
+    return res.status(400).json({ ok: false, error: 'query is required.' });
+  }
+
+  if (!KAKAO_REST_API_KEY) {
+    return res.status(500).json({ ok: false, error: 'KAKAO_REST_API_KEY is not set.' });
+  }
+
+  try {
+    const kakaoUrl = new URL('https://dapi.kakao.com/v2/local/search/address.json');
+    kakaoUrl.searchParams.set('query', query);
+    const response = await fetch(kakaoUrl, {
+      headers: { Authorization: `KakaoAK ${KAKAO_REST_API_KEY}` }
+    });
+    const payload = await response.json();
+    const document = payload.documents?.[0];
+
+    if (!response.ok || !document) {
+      return res.status(response.ok ? 404 : response.status).json({ ok: false, verified: false, payload });
+    }
+
+    return res.json({
+      ok: true,
+      verified: true,
+      lat: Number(document.y),
+      lng: Number(document.x),
+      matchedAddress: document.address_name || document.road_address?.address_name || query
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, verified: false, error: error.message });
+  }
+});
+
 app.get('/api/directions', async (req, res) => {
   const { origin, destination, mode = 'TRANSIT', priority = 'RECOMMEND' } = req.query;
 

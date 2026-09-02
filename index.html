@@ -706,7 +706,25 @@
     }
 
     async function geocodeAddress(address) {
-      if (!address) return { lat: 37.495, lng: 126.945 };
+      if (!address) return null;
+
+      const apiBase = window.SCHOOLWAY_API_BASE || (
+        window.location.hostname === 'localhost'
+          ? 'http://localhost:3000'
+          : 'https://schoolway-api.vercel.app'
+      );
+
+      try {
+        const response = await fetch(`${apiBase}/api/geocode?query=${encodeURIComponent(address)}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.verified && Number.isFinite(data.lat) && Number.isFinite(data.lng)) {
+            return data;
+          }
+        }
+      } catch (e) {
+        console.warn('Kakao geocoding proxy unavailable:', e);
+      }
 
       if (window.kakao && window.kakao.maps && kakao.maps.services && kakao.maps.services.Geocoder) {
         try {
@@ -714,7 +732,12 @@
           const result = await new Promise((resolve) => {
             geocoder.addressSearch(address, (res, status) => {
               if (status === kakao.maps.services.Status.OK && res && res.length > 0) {
-                resolve({ lat: parseFloat(res[0].y), lng: parseFloat(res[0].x) });
+                resolve({
+                  lat: parseFloat(res[0].y),
+                  lng: parseFloat(res[0].x),
+                  verified: true,
+                  matchedAddress: res[0].address_name || res[0].road_address?.address_name || address
+                });
               } else {
                 resolve(null);
               }
@@ -735,7 +758,9 @@
           if (json.documents && json.documents.length > 0) {
             return {
               lat: parseFloat(json.documents[0].y),
-              lng: parseFloat(json.documents[0].x)
+              lng: parseFloat(json.documents[0].x),
+              verified: true,
+              matchedAddress: json.documents[0].address_name || json.documents[0].road_address?.address_name || address
             };
           }
         } catch (e) {
@@ -743,23 +768,12 @@
         }
       }
 
-      if (address.includes('상도로 369') || address.includes('상도동')) return { lat: 37.4965, lng: 126.9535 };
-      if (address.includes('관악로 145') || address.includes('봉천동')) return { lat: 37.4782, lng: 126.9515 };
-      if (address.includes('대방동 23') || address.includes('대방동')) return { lat: 37.5125, lng: 126.9265 };
-      if (address.includes('신림로') || address.includes('신림동')) return { lat: 37.4842, lng: 126.9298 };
-      if (address.includes('사당로') || address.includes('사당동')) return { lat: 37.4831, lng: 126.9740 };
-      if (address.includes('노량진로') || address.includes('노량진동')) return { lat: 37.5135, lng: 126.9420 };
-      if (address.includes('보라매로') || address.includes('신대방동')) return { lat: 37.4912, lng: 126.9240 };
-      if (address.includes('낙성대로') || address.includes('인헌동')) return { lat: 37.4715, lng: 126.9630 };
+      return null;
+    }
 
-      let hash = 0;
-      for (let i = 0; i < address.length; i++) {
-        hash = ((hash << 5) - hash) + address.charCodeAt(i);
-        hash |= 0;
-      }
-      const latOffset = ((Math.abs(hash) % 1000) - 500) / 30000;
-      const lngOffset = ((Math.abs(hash >> 3) % 1000) - 500) / 30000;
-      return { lat: 37.490 + latOffset, lng: 126.940 + lngOffset };
+    function formatDistance(distanceMeters) {
+      const meters = Math.max(0, Math.round(Number(distanceMeters) || 0));
+      return meters < 1000 ? `${meters} m` : `${(meters / 1000).toFixed(1)} km`;
     }
 
     async function fetchKakaoDirectionsSummary(lat, lng, school, mode = 'walk') {
@@ -816,16 +830,12 @@
       const actualRoute = await fetchKakaoDirectionsSummary(lat, lng, school, mode);
       if (actualRoute) {
         const minutes = Math.max(1, Math.round(actualRoute.durationSeconds / 60));
-        const displayDist = actualRoute.distanceMeters < 1000
-          ? `${actualRoute.distanceMeters} m`
-          : `${(actualRoute.distanceMeters / 1000).toFixed(2)} km`;
-
         return {
           mode,
           modeText: mode === 'walk' ? '🚶 도보 기준' : '🚌 대중교통 기준',
           distanceMeters: actualRoute.distanceMeters,
-          distanceKm: (actualRoute.distanceMeters / 1000).toFixed(2),
-          distanceText: displayDist,
+          distanceKm: (actualRoute.distanceMeters / 1000).toFixed(1),
+          distanceText: formatDistance(actualRoute.distanceMeters),
           timeMins: minutes,
           timeText: mode === 'walk' ? `도보 약 ${minutes}분` : `대중교통 약 ${minutes}분`,
           routesInfo: actualRoute.routesInfo,
@@ -836,14 +846,12 @@
 
       if (isWalkable) {
         const mins = Math.max(3, Math.round(distMeters / 67));
-        const displayDist = distMeters < 1000 ? `${distMeters} m` : `${(distMeters / 1000).toFixed(2)} km`;
-
         return {
           mode: 'walk',
           modeText: '🚶 도보 기준',
           distanceMeters: distMeters,
-          distanceKm: (distMeters / 1000).toFixed(2),
-          distanceText: displayDist,
+          distanceKm: (distMeters / 1000).toFixed(1),
+          distanceText: formatDistance(distMeters),
           timeMins: mins,
           timeText: `도보 약 ${mins}분`,
           routesInfo: '인도/횡단보도 추천 보행로',
@@ -851,7 +859,7 @@
           source: 'heuristic'
         };
       } else {
-        const transitKmStr = (distMeters / 1000).toFixed(2);
+        const transitKmStr = (distMeters / 1000).toFixed(1);
         const transitMins = Math.round(parseFloat(transitKmStr) * 4 + 7);
 
         return {
@@ -859,7 +867,7 @@
           modeText: '🚌 대중교통 기준',
           distanceMeters: distMeters,
           distanceKm: transitKmStr,
-          distanceText: `${transitKmStr} km`,
+          distanceText: formatDistance(distMeters),
           timeMins: transitMins,
           timeText: `대중교통 약 ${transitMins}분`,
           routesInfo: school.busRoutes ? school.busRoutes : '관내 노선 버스 / 지하철',
@@ -895,7 +903,7 @@
         finalResults.push({ school: item.school, route });
       }
 
-      finalResults.sort((a, b) => a.route.timeMins - b.route.timeMins || a.route.distanceMeters - b.route.distanceMeters);
+      finalResults.sort((a, b) => a.route.distanceMeters - b.route.distanceMeters || a.route.timeMins - b.route.timeMins);
       return finalResults.slice(0, 3);
     }
 
@@ -1288,7 +1296,7 @@
       const geo = await geocodeAddress(address);
       if (!geo || !Number.isFinite(geo.lat) || !Number.isFinite(geo.lng)) {
         if (statusEl) {
-          statusEl.innerText = '주소 좌표를 찾지 못했습니다';
+          statusEl.innerText = '카카오 주소 검증 실패';
         }
         showToast('입력하신 주소를 카카오로 찾지 못했습니다. 도로명 주소를 다시 확인해 주세요.');
         return;
