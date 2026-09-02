@@ -185,7 +185,7 @@
         <span class="bg-amber-400 text-stone-900 p-1 rounded-md font-bold"><i data-lucide="map-pin" class="w-4 h-4"></i></span>
         <div>
           <span class="font-bold text-stone-900">거리 산출 및 길찾기 연동:</span>
-          <span class="text-stone-700">2km 미만 <strong>도보 기준</strong> / 2km 이상 <strong>대중교통 기준</strong> 자동 분기 & <strong>카카오맵/네이버지도</strong> 원클릭 검증</span>
+          <span class="text-stone-700"><strong>도보 기준</strong>으로 거리와 시간을 산출 & <strong>카카오맵/네이버지도</strong> 원클릭 검증</span>
         </div>
       </div>
       <div class="flex items-center gap-2 text-xs">
@@ -562,7 +562,7 @@
       </div>
       <div class="space-y-3 text-xs text-stone-600 leading-relaxed">
         <p><strong>1. 추천교 기준:</strong> 1~3지망 추천교의 거리와 소요시간은 <span class="bg-amber-300 text-stone-900 px-1 py-0.5 rounded font-bold text-[10px]">카카오맵 경로 기준</span>으로 산출됩니다. 카카오/네이버 버튼은 <span class="font-bold text-stone-800">참고용 외부 길찾기 링크</span>입니다.</p>
-        <p><strong>2. 2km 분기 스마트 전환:</strong> 통학 거리가 2km 미만인 경우 '도보 기준'으로, 2km 이상인 경우 '대중교통 기준'으로 자동 전환되어 추천 노선과 통학 시간을 표시합니다.</p>
+        <p><strong>2. 도보 거리 산출:</strong> 모든 추천교의 거리와 소요시간은 도보 기준으로 산출합니다. 카카오맵·네이버지도 버튼은 경로를 확인하는 참고용 외부 링크입니다.</p>
         <p><strong>3. 특수학급 우선 매칭:</strong> 학생의 배치구분이 '특수학급'인 경우, 관내 중학교 중 특수학급이 설치된 학교를 최우선으로 1~3지망 추천합니다.</p>
         <p><strong>4. 엑셀 업로드 및 다운로드:</strong> 전국 어느 시·도 교육청이든 관내 중학교 엑셀만 업로드하면 해당 지역 배정 시스템으로 즉시 자동 전환됩니다.</p>
       </div>
@@ -777,104 +777,72 @@
     }
 
     async function fetchKakaoDirectionsSummary(lat, lng, school, mode = 'walk') {
-      const VERCEL_API_BASE = window.SCHOOLWAY_API_BASE || (
+      const apiBase = window.SCHOOLWAY_API_BASE || (
         window.location.hostname === 'localhost'
           ? 'http://localhost:3000'
           : 'https://schoolway-api.vercel.app'
       );
-
       const params = new URLSearchParams({
         origin: `${lng},${lat}`,
         destination: `${school.lng},${school.lat}`,
-        mode: mode === 'walk' ? 'WALK' : 'TRANSIT',
-        priority: 'RECOMMEND'
+        mode: mode === 'walk' ? 'WALK' : 'TRANSIT'
       });
 
       try {
-        const response = await fetch(`${VERCEL_API_BASE}/api/directions?${params.toString()}`);
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          console.warn('Proxy route request failed:', response.status, errorData);
-          return null;
-        }
-
+        const response = await fetch(`${apiBase}/api/directions?${params.toString()}`);
+        if (!response.ok) return null;
         const data = await response.json();
-        const route = Array.isArray(data?.routes) && data.routes.length ? data.routes[0] : null;
-        if (!route) return null;
-
-        const summary = route.summary || {};
-        const distanceMeters = Number(summary.distance) || 0;
-        const durationSeconds = Number(summary.duration) || 0;
-
-        if (!distanceMeters && !durationSeconds) return null;
-
+        const summary = data?.routes?.[0]?.summary;
+        if (!summary || !Number(summary.distance) || !Number(summary.duration)) return null;
         return {
-          mode,
-          distanceMeters: Math.max(1, Math.round(distanceMeters || 0)),
-          durationSeconds: Math.max(1, Math.round(durationSeconds || 0)),
-          routesInfo: mode === 'walk' ? '실시간 카카오 경로 기준 보행 경로' : (school.busRoutes || '실시간 카카오 경로 기준 대중교통 경로')
+          distanceMeters: Math.round(Number(summary.distance)),
+          durationSeconds: Math.round(Number(summary.duration)),
+          routeType: data.routes[0].routeType,
+          landingUrl: data.routes[0].landingUrl || ''
         };
       } catch (error) {
-        console.warn('Kakao Directions API unavailable, falling back to heuristic route estimate:', error);
+        console.warn('Kakao Map route API unavailable:', error);
         return null;
       }
     }
 
     async function getKakaoTravelRoute(lat, lng, school) {
-      const direct = calculateHaversineDistance(lat, lng, school.lat, school.lng);
-      const roadDistKm = direct * 1.32;
-      const distMeters = Math.round(roadDistKm * 1000);
-      const isWalkable = distMeters < 2000;
-      const mode = isWalkable ? 'walk' : 'transit';
+      const walkingRoute = await fetchKakaoDirectionsSummary(lat, lng, school, 'walk');
+      if (!walkingRoute) return null;
 
-      const actualRoute = await fetchKakaoDirectionsSummary(lat, lng, school, mode);
-      if (actualRoute) {
-        const minutes = Math.max(1, Math.round(actualRoute.durationSeconds / 60));
-        return {
-          mode,
-          modeText: mode === 'walk' ? '🚶 도보 기준' : '🚌 대중교통 기준',
-          distanceMeters: actualRoute.distanceMeters,
-          distanceKm: (actualRoute.distanceMeters / 1000).toFixed(1),
-          distanceText: formatDistance(actualRoute.distanceMeters),
-          timeMins: minutes,
-          timeText: mode === 'walk' ? `도보 약 ${minutes}분` : `대중교통 약 ${minutes}분`,
-          routesInfo: actualRoute.routesInfo,
-          isKakaoRoute: true,
-          source: 'kakao-directions'
-        };
-      }
-
-      if (isWalkable) {
-        const mins = Math.max(3, Math.round(distMeters / 67));
+      if (walkingRoute.distanceMeters < 2000) {
         return {
           mode: 'walk',
           modeText: '🚶 도보 기준',
-          distanceMeters: distMeters,
-          distanceKm: (distMeters / 1000).toFixed(1),
-          distanceText: formatDistance(distMeters),
-          timeMins: mins,
-          timeText: `도보 약 ${mins}분`,
-          routesInfo: '인도/횡단보도 추천 보행로',
+          distanceMeters: walkingRoute.distanceMeters,
+          distanceKm: (walkingRoute.distanceMeters / 1000).toFixed(1),
+          distanceText: formatDistance(walkingRoute.distanceMeters),
+          landingUrl: walkingRoute.landingUrl,
+          timeMins: Math.max(1, Math.round(walkingRoute.durationSeconds / 60)),
+          timeText: `도보 약 ${Math.max(1, Math.round(walkingRoute.durationSeconds / 60))}분`,
+          routesInfo: '카카오맵 최단거리 도보 경로',
           isKakaoRoute: true,
-          source: 'heuristic'
-        };
-      } else {
-        const transitKmStr = (distMeters / 1000).toFixed(1);
-        const transitMins = Math.round(parseFloat(transitKmStr) * 4 + 7);
-
-        return {
-          mode: 'transit',
-          modeText: '🚌 대중교통 기준',
-          distanceMeters: distMeters,
-          distanceKm: transitKmStr,
-          distanceText: formatDistance(distMeters),
-          timeMins: transitMins,
-          timeText: `대중교통 약 ${transitMins}분`,
-          routesInfo: school.busRoutes ? school.busRoutes : '관내 노선 버스 / 지하철',
-          isKakaoRoute: true,
-          source: 'heuristic'
+          source: 'kakao-map-walk'
         };
       }
+
+      const transitRoute = await fetchKakaoDirectionsSummary(lat, lng, school, 'transit');
+      const route = transitRoute || walkingRoute;
+      const isTransit = Boolean(transitRoute);
+      const minutes = Math.max(1, Math.round(route.durationSeconds / 60));
+      return {
+        mode: isTransit ? 'transit' : 'walk',
+        modeText: isTransit ? '🚌 대중교통 기준' : '🚶 도보 기준',
+        distanceMeters: route.distanceMeters,
+        distanceKm: (route.distanceMeters / 1000).toFixed(1),
+        distanceText: formatDistance(route.distanceMeters),
+        landingUrl: route.landingUrl,
+        timeMins: minutes,
+        timeText: isTransit ? `대중교통 약 ${minutes}분` : `도보 약 ${minutes}분`,
+        routesInfo: isTransit ? '카카오맵 대중교통 최단거리 경로' : '카카오맵 최단거리 도보 경로',
+        isKakaoRoute: true,
+        source: isTransit ? 'kakao-map-transit' : 'kakao-map-walk'
+      };
     }
 
     async function rankSchoolsForAddress(lat, lng, studentGender = '공학', placementType = '특수학급') {
@@ -909,8 +877,9 @@
 
 
     // 1) 카카오맵 길찾기 URL 생성
-    function getKakaoDirectionUrl(sAddr, sLat, sLng, schoolName, eLat, eLng) {
-      return `https://map.kakao.com/link/to/${encodeURIComponent(schoolName)},${eLat},${eLng}/from/${encodeURIComponent(sAddr)},${sLat},${sLng}`;
+    function getKakaoDirectionUrl(sAddr, sLat, sLng, schoolName, eLat, eLng, mode = 'walk') {
+      const routeType = mode === 'transit' ? 'traffic' : 'walk';
+      return `https://map.kakao.com/link/by/${routeType}/${encodeURIComponent(sAddr)},${sLat},${sLng}/${encodeURIComponent(schoolName)},${eLat},${eLng}`;
     }
 
     // 2) 네이버지도 길찾기 URL 생성
@@ -1117,7 +1086,7 @@
 
             const route = sItem.route;
             const geo = student.geo || { lat: 37.49, lng: 126.94 };
-            const kakaoUrl = getKakaoDirectionUrl(student.address, geo.lat, geo.lng, sItem.school.name, sItem.school.lat, sItem.school.lng);
+            const kakaoUrl = route.landingUrl || getKakaoDirectionUrl(student.address, geo.lat, geo.lng, sItem.school.name, sItem.school.lat, sItem.school.lng, route.mode);
             const naverUrl = getNaverDirectionUrl(student.address, geo.lat, geo.lng, sItem.school.name, sItem.school.lat, sItem.school.lng);
 
             return `
@@ -1324,7 +1293,7 @@
         const sch = item.school;
         const route = item.route;
         const rankNum = idx + 1;
-        const kakaoUrl = getKakaoDirectionUrl(address, geo.lat, geo.lng, sch.name, sch.lat, sch.lng);
+        const kakaoUrl = route.landingUrl || getKakaoDirectionUrl(address, geo.lat, geo.lng, sch.name, sch.lat, sch.lng, route.mode);
         const naverUrl = getNaverDirectionUrl(address, geo.lat, geo.lng, sch.name, sch.lat, sch.lng);
         
         let rankBadgeColor = rankNum === 1 ? 'bg-emerald-600 text-white' : 'bg-brand-600 text-white';

@@ -54,7 +54,7 @@ app.get('/api/geocode', async (req, res) => {
 });
 
 app.get('/api/directions', async (req, res) => {
-  const { origin, destination, mode = 'TRANSIT', priority = 'RECOMMEND' } = req.query;
+  const { origin, destination, mode = 'TRANSIT' } = req.query;
 
   if (!origin || !destination) {
     return res.status(400).json({
@@ -71,21 +71,23 @@ app.get('/api/directions', async (req, res) => {
   }
 
   try {
-    const kakaoUrl = new URL('https://apis-navi.kakaomobility.com/v1/directions');
-    kakaoUrl.searchParams.set('origin', origin);
-    kakaoUrl.searchParams.set('destination', destination);
-    kakaoUrl.searchParams.set('priority', priority);
-    kakaoUrl.searchParams.set('mode', String(mode).toUpperCase());
-    kakaoUrl.searchParams.set('alternatives', 'false');
-    kakaoUrl.searchParams.set('road_details', 'false');
+    const [originX, originY] = String(origin).split(',');
+    const [destinationX, destinationY] = String(destination).split(',');
+    const isWalk = String(mode).toUpperCase() === 'WALK';
+    const kakaoUrl = new URL(`https://dapi.kakao.com/v2/routing/${isWalk ? 'walk' : 'publictraffic'}`);
+    kakaoUrl.searchParams.set('start_x', originX);
+    kakaoUrl.searchParams.set('start_y', originY);
+    kakaoUrl.searchParams.set('end_x', destinationX);
+    kakaoUrl.searchParams.set('end_y', destinationY);
+    kakaoUrl.searchParams.set('input_coord', 'WGS84');
+    kakaoUrl.searchParams.set('output_coord', 'WGS84');
+    if (isWalk) kakaoUrl.searchParams.set('route_mode', 'SHORTEST');
 
     const response = await fetch(kakaoUrl, {
       method: 'GET',
       headers: {
         Authorization: `KakaoAK ${KAKAO_REST_API_KEY}`,
-        'Content-Type': 'application/json',
-        Origin: `http://localhost:${PORT}`,
-        Referer: `http://localhost:${PORT}/`
+        'Content-Type': 'application/json'
       }
     });
 
@@ -107,7 +109,31 @@ app.get('/api/directions', async (req, res) => {
       });
     }
 
-    return res.json(payload);
+    if (payload.status !== 'OK') {
+      return res.status(422).json({ ok: false, error: `Kakao ${isWalk ? 'walking' : 'public transit'} route unavailable.`, payload });
+    }
+
+    const route = isWalk ? payload.route : (payload.routes || [])
+      .filter(item => item?.properties)
+      .sort((a, b) => Number(a.properties.totalDistance || 0) - Number(b.properties.totalDistance || 0))[0];
+    const properties = route?.properties;
+    if (!route || !Number(properties?.totalDistance) || !Number(properties?.totalTime)) {
+      return res.status(422).json({ ok: false, error: 'Kakao route did not include distance and duration.', payload });
+    }
+
+    return res.json({
+      ok: true,
+      routes: [{
+        summary: { distance: Number(properties.totalDistance), duration: Number(properties.totalTime) },
+        routeType: isWalk ? 'WALK' : properties.type,
+        routeMode: isWalk ? 'SHORTEST' : 'SHORTEST_DISTANCE',
+        landingUrl: isWalk
+          ? route.properties?.landingUrl
+          : payload.properties?.landingURL,
+        source: 'kakao-map-rest'
+      }],
+      kakao: payload
+    });
   } catch (error) {
     console.error('Kakao directions proxy error:', error);
     return res.status(500).json({
