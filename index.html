@@ -297,6 +297,7 @@
             <thead>
               <tr class="bg-stone-100 text-stone-700 border-b border-stone-200 font-semibold text-xs uppercase tracking-wider">
                 <th class="py-3.5 px-2.5 text-center" style="width: 5%; min-width: 40px;">번호</th>
+                <th class="py-3.5 px-2.5 text-center" style="width: 9%; min-width: 70px;">이름</th>
                 <th class="py-3.5 px-2.5 text-center" style="width: 5%; min-width: 40px;">성별</th>
                 <th class="py-3.5 px-3" style="width: 26%; min-width: 200px;">주민등록상 주소지</th>
                 <th class="py-3.5 px-2 text-center" style="width: 8%; min-width: 80px;">배치구분</th>
@@ -308,7 +309,7 @@
             </thead>
             <tbody id="batchTableBody" class="divide-y divide-stone-200 text-stone-800 font-normal">
               <tr id="emptyTableNotice">
-                <td colspan="8" class="text-center py-12 text-stone-400 bg-stone-50/50">
+                <td colspan="9" class="text-center py-12 text-stone-400 bg-stone-50/50">
                   <i data-lucide="folder-open" class="w-10 h-10 mx-auto mb-2 text-stone-300"></i>
                   <p class="font-medium text-sm">등록된 학생 명단이 없습니다.</p>
                   <p class="text-xs text-stone-400 mt-1">상단의 [샘플 학생 불러오기] 또는 [학생 엑셀 업로드] 버튼을 클릭하세요.</p>
@@ -503,6 +504,11 @@
       <input type="hidden" id="editStudentIndex">
       
       <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-bold text-stone-700 mb-1">학생 이름</label>
+          <input type="text" id="editStudentName" class="w-full p-2.5 border rounded-lg bg-stone-50 font-medium" placeholder="학생 이름을 입력하세요">
+        </div>
+
         <div>
           <label class="block font-bold text-stone-700 mb-1">성별</label>
           <select id="editStudentGender" class="w-full p-2.5 border rounded-lg bg-stone-50">
@@ -892,14 +898,14 @@
        ========================================================================== */
     function loadMockBatchData() {
       const mockStudents = [
-        { id: 1, gender: '남', address: '서울특별시 동작구 상도로 369', placementType: '특수학급', choice1: '', choice2: '', choice3: '' },
-        { id: 2, gender: '여', address: '서울특별시 관악구 관악로 145', placementType: '일반학급', choice1: '', choice2: '', choice3: '' },
-        { id: 3, gender: '남', address: '서울특별시 동작구 대방동 23', placementType: '특수학급', choice1: '', choice2: '', choice3: '' },
-        { id: 4, gender: '여', address: '서울특별시 관악구 신림로 117', placementType: '특수학교', choice1: '서울정진학교', choice2: '-', choice3: '-' },
-        { id: 5, gender: '남', address: '서울특별시 동작구 노량진로 100', placementType: '특수학급', choice1: '', choice2: '', choice3: '' },
-        { id: 6, gender: '여', address: '서울특별시 관악구 낙성대로 40', placementType: '특수학급', choice1: '', choice2: '', choice3: '' },
-        { id: 7, gender: '남', address: '서울특별시 동작구 보라매로 5길 15', placementType: '일반학급', choice1: '', choice2: '', choice3: '' },
-        { id: 8, gender: '여', address: '서울특별시 관악구 난곡로 210', placementType: '특수학급', choice1: '', choice2: '', choice3: '' }
+        { id: 1, name: '강민수', gender: '남', address: '서울특별시 동작구 상도로 369', placementType: '특수학급', choice1: '', choice2: '', choice3: '' },
+        { id: 2, name: '김서연', gender: '여', address: '서울특별시 관악구 관악로 145', placementType: '일반학급', choice1: '', choice2: '', choice3: '' },
+        { id: 3, name: '박준호', gender: '남', address: '서울특별시 동작구 대방동 23', placementType: '특수학급', choice1: '', choice2: '', choice3: '' },
+        { id: 4, name: '이지은', gender: '여', address: '서울특별시 관악구 신림로 117', placementType: '특수학교', choice1: '서울정진학교', choice2: '-', choice3: '-' },
+        { id: 5, name: '최우진', gender: '남', address: '서울특별시 동작구 노량진로 100', placementType: '특수학급', choice1: '', choice2: '', choice3: '' },
+        { id: 6, name: '한예린', gender: '여', address: '서울특별시 관악구 낙성대로 40', placementType: '특수학급', choice1: '', choice2: '', choice3: '' },
+        { id: 7, name: '정도윤', gender: '남', address: '서울특별시 동작구 보라매로 5길 15', placementType: '일반학급', choice1: '', choice2: '', choice3: '' },
+        { id: 8, name: '오하나', gender: '여', address: '서울특별시 관악구 난곡로 210', placementType: '특수학급', choice1: '', choice2: '', choice3: '' }
       ];
 
       studentList = mockStudents.map(s => ({
@@ -916,10 +922,10 @@
 
     function downloadStudentTemplate() {
       const template = [
-        ['번호', '성별', '주민등록상 주소지', '배치구분', '1지망', '2지망', '3지망'],
-        [1, '남', '서울특별시 동작구 상도로 369', '특수학급', '', '', ''],
-        [2, '여', '서울특별시 관악구 관악로 145', '일반학급', '', '', ''],
-        [3, '남', '서울특별시 동작구 대방동 23', '특수학교', '서울정진학교', '', '']
+        ['번호', '이름', '성별', '주민등록상 주소지', '배치구분'],
+        [1, '강민수', '남', '서울특별시 동작구 상도로 369', '특수학급'],
+        [2, '김서연', '여', '서울특별시 관악구 관악로 145', '일반학급'],
+        [3, '박준호', '남', '서울특별시 동작구 대방동 23', '특수학교']
       ];
       const worksheet = XLSX.utils.aoa_to_sheet(template);
       const workbook = XLSX.utils.book_new();
@@ -947,6 +953,7 @@
 
           const header = json[0].map(h => String(h || '').trim());
           const idxNo = header.findIndex(h => h.includes('번호') || h.includes('연번'));
+          const idxName = header.findIndex(h => h.includes('이름') || h.includes('학생명') || h.includes('성명'));
           const idxGender = header.findIndex(h => h.includes('성별'));
           const idxAddr = header.findIndex(h => h.includes('주소') || h.includes('거주지'));
           const idxPlace = header.findIndex(h => h.includes('배치') || h.includes('구분'));
@@ -962,12 +969,14 @@
             const address = idxAddr !== -1 ? row[idxAddr] : (row[2] || row[1]);
             if (!address) continue;
 
+            const name = idxName !== -1 ? row[idxName] : '';
             const gender = idxGender !== -1 ? row[idxGender] : '남';
             const num = idxNo !== -1 ? row[idxNo] : i;
             const placement = idxPlace !== -1 ? row[idxPlace] : '특수학급';
 
             studentList.push({
               id: num,
+              name: String(name || '').trim() || `학생${i}`,
               gender: String(gender).trim().includes('여') ? '여' : '남',
               address: String(address).trim(),
               placementType: String(placement).trim() || '특수학급',
@@ -1038,7 +1047,7 @@
       if (studentList.length === 0) {
         tbody.innerHTML = `
           <tr id="emptyTableNotice">
-            <td colspan="8" class="text-center py-12 text-stone-400 bg-stone-50/50">
+            <td colspan="9" class="text-center py-12 text-stone-400 bg-stone-50/50">
               <i data-lucide="folder-open" class="w-10 h-10 mx-auto mb-2 text-stone-300"></i>
               <p class="font-medium text-sm">등록된 학생 명단이 없습니다.</p>
               <p class="text-xs text-stone-400 mt-1">상단의 [샘플 학생 불러오기] 또는 [학생 엑셀 업로드] 버튼을 클릭하세요.</p>
@@ -1062,6 +1071,7 @@
         if (!student.calculated) {
           row.innerHTML = `
             <td class="py-3 px-2 text-center text-stone-500 font-mono">${student.id || index + 1}</td>
+            <td class="py-3 px-2 text-center font-bold text-stone-700">${student.name || '학생'}</td>
             <td class="py-3 px-2 text-center font-bold text-stone-700">${student.gender}</td>
             <td class="py-3 px-3 text-stone-600 font-mono text-[11px] leading-relaxed break-words whitespace-normal" title="${student.address}" style="width: 26%; min-width: 200px; max-width: 26%;">${student.address}</td>
             <td class="py-3 px-2 text-center">
@@ -1134,6 +1144,7 @@
 
           row.innerHTML = `
             <td class="py-2.5 px-2 text-center text-stone-500 font-mono">${student.id || index + 1}</td>
+            <td class="py-2.5 px-2 text-center font-bold text-stone-700">${student.name || '학생'}</td>
             <td class="py-2.5 px-2 text-center font-bold text-stone-700">${student.gender}</td>
             <td class="py-2.5 px-3 text-stone-600 font-mono text-[11px] leading-relaxed break-words whitespace-normal" title="${student.address}" style="width: 26%; min-width: 200px; max-width: 26%;">${student.address}</td>
             <td class="py-2.5 px-2 text-center">
@@ -1211,6 +1222,7 @@
         const s3 = s.top3[2];
         return {
           '번호': s.id || idx + 1,
+          '이름': s.name || '학생',
           '성별': s.gender,
           '주민등록상 주소지': s.address,
           '특수교육 배치구분': s.placementType,
@@ -1620,6 +1632,7 @@
       if (!s) return;
 
       document.getElementById('editStudentIndex').value = index;
+      document.getElementById('editStudentName').value = s.name || '';
       document.getElementById('editStudentGender').value = s.gender;
       document.getElementById('editStudentAddress').value = s.address;
       document.getElementById('editStudentPlacement').value = s.placementType;
@@ -1652,6 +1665,7 @@
       if (idx === '' || !studentList[idx]) return;
 
       const s = studentList[idx];
+      s.name = document.getElementById('editStudentName').value.trim() || '학생';
       s.gender = document.getElementById('editStudentGender').value;
       s.address = document.getElementById('editStudentAddress').value;
       s.placementType = document.getElementById('editStudentPlacement').value;
